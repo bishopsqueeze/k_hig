@@ -26,41 +26,47 @@ source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 ##------------------------------------------------------------------
 ## Load the training data
 ##------------------------------------------------------------------
-load("01_HiggsRawTrain.Rdata")
-load("01_HiggsRawTest.Rdata")
+load("02_HiggsPreProcTrain.Rdata")
+load("02_HiggsPreProcTest.Rdata")
 
 
 ##******************************************************************
 ## Main
 ##******************************************************************
 
-## identify columns used for scoring the training data
-eval.cols   <- c("eventid", "label", "weight")
+## an id column to each subset of data
+train.pp[,id:=c("tr")]
+test.pp[,id:=c("te")]
 
-## isolate the data columns
-train.cols  <- colnames(train.dt)[ which(!(colnames(train.dt) %in% eval.cols))]
-test.cols   <- colnames(test.dt)[ which(!(colnames(test.dt) %in% eval.cols))]
+## combine the datasets
+comb.pp <- rbind(train.pp, test.pp)
+setkey(comb.pp, eventid)
 
-## isolate evaluation data
-train.eval  <- train.dt[,eval.cols,with=FALSE]
-setkey(train.eval, eventid)
+## identify columns you *wont* scale
+noscale.idx <- c(
+                    grep("id", colnames(comb.pp)),
+                    grep(".fl$", colnames(comb.pp)),
+                    grep(".[0-9]$", colnames(comb.pp))
+                )
 
-## isolate the training data
-train.dt    <- train.dt[, -which((colnames(train.dt) %in% c("label", "weight"))), with=FALSE]
+## join the scaled data to the original after dropping orig
+comb.sc <- cbind(
+                    comb.pp[,noscale.idx,with=FALSE],
+                    data.table(scale(comb.pp[,-noscale.idx,with=FALSE]))
+                )
+setkey(comb.sc,"id")
 
-## preprocess the training and test data
-train.pp    <- preProcessData(mydt=train.dt, mycols=train.cols)
-setkey(train.pp, eventid)
+## break back into train and test datasets
+train.sc    <- comb.sc["tr"]
+test.sc     <- comb.sc["te"]
 
-test.pp     <- preProcessData(mydt=test.dt, mycols=test.cols)
-setkey(test.pp, eventid)
+## drop the ids
+train.sc[,id:=NULL]
+test.sc[,id:=NULL]
 
-
-##------------------------------------------------------------------
-## Save the pre-processed files
-##------------------------------------------------------------------
-save(train.pp, train.eval, file="02_HiggsPreProcTrain.Rdata")
-save(test.pp, file="02_HiggsPreProcTest.Rdata")
+## save the results
+save(train.eval, train.sc, file="03_HiggsScaledTrain.Rdata")
+save(test.sc, file="03_HiggsScaledTest.Rdata")
 
 
 
