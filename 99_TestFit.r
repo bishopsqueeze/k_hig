@@ -13,7 +13,7 @@ library(doMC)
 ##------------------------------------------------------------------
 ## register cores
 ##------------------------------------------------------------------
-registerDoMC(4)
+registerDoMC(2)
 
 ##------------------------------------------------------------------
 ## Clear the workspace
@@ -50,10 +50,10 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
 ##------------------------------------------------------------------
 
 ## check order of data
-if (sum(trainDescr[,eventid] - trainClass[,eventid]) == 0) {
-    trainDescr[,eventid:=NULL]
-    trainClass[,eventid:=NULL]
-}
+#if (sum(trainDescr[,eventid] - trainClass[,eventid]) == 0) {
+#    trainDescr[,eventid:=NULL]
+#    trainClass[,eventid:=NULL]
+#}
 
 
 ## temporarily drop cols with NA
@@ -89,7 +89,7 @@ gbmGrid    <- expand.grid(
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 10
+num.cv      <- 3
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
@@ -107,14 +107,36 @@ fitControl <- trainControl(
                     classProbs=TRUE)
 
 ##------------------------------------------------------------------
+## prep the data for fit
+##------------------------------------------------------------------
+trainClass.df   <- as.data.frame(trainClass)
+trainDescr.df   <- as.data.frame(trainDescr)
+
+##------------------------------------------------------------------
 ## perform the cross-validation fit
 ##------------------------------------------------------------------
-tmp.fit <- try(train(   x=as.data.frame(trainDescr[smp.idx[[1]],]),
-                        y=as.factor(trainClass[smp.idx[[1]],label]),
+tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-grep("eventid",colnames(trainDescr))],
+                        y=trainClass.df[smp.idx[[1]],c("label")],
                         method="gbm",
                         trControl=fitControl,
                         verbose=TRUE,
-                        tuneLength=10))
+                        tuneLength=5))
+
+tmp.pred <- predict(tmp.fit)
+tmp.true <- unlist(trainClass[smp.idx[[1]],label])
+
+##------------------------------------------------------------------
+## perform the cross-validation fit
+##------------------------------------------------------------------
+tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-grep("eventid",colnames(trainDescr))],
+                        y=trainClass.df[smp.idx[[1]],c("label")],
+                        method="ada",
+                        trControl=fitControl,
+                        verbose=TRUE,
+                        tuneLength=5))
+
+
+
 
 
 
