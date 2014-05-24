@@ -33,7 +33,7 @@ source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 ##------------------------------------------------------------------
 ## Load the training data
 ##------------------------------------------------------------------
-loadfile <- "04_HiggsTrainExRbcLc.Rdata"
+loadfile <- "04_HiggsTrainExRbcLcNumNa.Rdata"
 load(loadfile)
 
 if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
@@ -42,7 +42,11 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
 } else if (loadfile == c("04_HiggsTrainExRbcNas.Rdata")) {
     trainDescr  <- train.ex.rbc.nas
     trainClass  <- train.eval
+} else if (loadfile == c("04_HiggsTrainExRbcLcNumNa.Rdata")) {
+    trainDescr  <- train.ex.rbc.lc.numna
+    trainClass  <- train.eval
 }
+
 
 ##******************************************************************
 ## Main
@@ -58,46 +62,71 @@ trainDescr.df   <- as.data.frame(trainDescr)
 ## Use a subset of the available data for the parameter search phase
 ##------------------------------------------------------------------
 
-## number of rows in the training data
-nr  <- dim(trainDescr.df)[1]
+## define the fraction to use as a hold-out sample
+p_ho    <- 0.20
 
-## number of samples to use for search
-ns  <- 10000
-
-## define the partition index
+## define a partition index
 set.seed(88888888)
-smp.idx    <- createDataPartition(
-                    y=trainClass.df[,c("label")],
-                    times=1,
-                    p = (ns/nr),
-                    list = TRUE)
+samp.idx    <- createDataPartition(
+                            y=trainClass.df[,c("label")],
+                            times=1,
+                            p = (1-p_ho),
+                            list = TRUE)
+
+## split data into training & hold-out
+holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
+holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
+sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
+sampClass    <- trainClass.df[  samp.idx$Resample1, ]
+
 
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 3
+num.cv      <- 10
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
 ## define the fit parameters
 fitControl <- trainControl(
-                    method="repeatedcv",
+                    method="cv",
                     number=num.cv,
-                    repeats=num.repeat,
                     verboseIter=TRUE,
-                    classProbs=TRUE)
-
+                    savePredictions=FALSE)
 
 ##------------------------------------------------------------------
 ## perform the fit
-##  - "rf" required a purging of the missings
 ##------------------------------------------------------------------
-tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-1],
-                        y=trainClass.df[smp.idx[[1]],c("label")],
-                        method="svmRadial",
+tmp.fit <- try(train(   x=sampDescr[,-1],
+                        y=sampClass[,c("label")],
+                        method="gbm",
                         trControl=fitControl,
                         verbose=TRUE,
-                        tuneLength=3))
+                        tuneGrid=data.frame(.interaction.depth=6, .n.trees=500, .shrinkage=0.01)))
+
+
+
+
+score.os    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
+class.os    <- predict(tmp.fit, newdata=holdDescr[,-1])
+
+cuts.os     <- quantile(score.os, probs=seq(0,1,0.01))
+cuts.ams    <- sapply(cuts.os, calcAmsCutoff, score.os, holdClass$label, holdClass$weight)
+
+calcAms(class.os, holdClass$label, holdClass$weight)
+
+
+save(tmp.fit, sampDescr, sampClass, holdDescr, holdClass, file="gbm_d6_t500_s01.Rdata")
+
+##ggplot(train.dt, aes(x=myscore, fill=label)) + geom_histogram(binwidth=1, alpha=.5, position="identity")
+
+
+
+knnFit <- train(Species ~ ., data = iris, method = "knn",
+trControl = trainControl(method = "cv"))
+
+rdaFit <- train(Species ~ ., data = iris, method = "rda",
+trControl = trainControl(method = "cv"))
 
 
 

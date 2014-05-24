@@ -1,5 +1,8 @@
 ##------------------------------------------------------------------
-## From the kaggle website:
+## The purpose of this test is to see what happens to the AMS if
+## we randomize the lables in various ways.  The Kaggle scoreboard
+## presents a random submission benchmark score = 0.58477.  I want
+## to see if I can reproduce that.
 ##------------------------------------------------------------------
 
 ##------------------------------------------------------------------
@@ -9,6 +12,7 @@ library(data.table)
 library(caret)
 library(foreach)
 library(doMC)
+library(xtable)
 
 ##------------------------------------------------------------------
 ## register cores
@@ -33,7 +37,7 @@ source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 ##------------------------------------------------------------------
 ## Load the training data
 ##------------------------------------------------------------------
-loadfile <- "04_HiggsTrainExRbcLcNumNa.Rdata"
+loadfile <- "04_HiggsTrainExRbcLc.Rdata"
 load(loadfile)
 
 if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
@@ -42,66 +46,74 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
 } else if (loadfile == c("04_HiggsTrainExRbcNas.Rdata")) {
     trainDescr  <- train.ex.rbc.nas
     trainClass  <- train.eval
-} else if (loadfile == c("04_HiggsTrainExRbcLcNumNa.Rdata")) {
-    trainDescr  <- train.ex.rbc.lc.numna
-    trainClass  <- train.eval
 }
-
 
 ##******************************************************************
 ## Main
 ##******************************************************************
 
-##------------------------------------------------------------------
-## Transform data to data.frame for the fitting procedure
-##------------------------------------------------------------------
-trainClass.df   <- as.data.frame(trainClass)
-trainDescr.df   <- as.data.frame(trainDescr)
+## isolate the training labels, weights
+debugClass  <- as.factor(trainClass[,label])
+debugWeight <- as.vector(trainClass[,weight])
 
-##------------------------------------------------------------------
-## Use a subset of the available data for the parameter search phase
-##------------------------------------------------------------------
-
-## number of rows in the training data
-nr  <- dim(trainDescr.df)[1]
-
-## number of samples to use for search
-ns  <- 20000
-
-## define the partition index
-set.seed(88888888)
-smp.idx    <- createDataPartition(
-                    y=trainClass.df[,c("label")],
-                    times=1,
-                    p = (ns/nr),
-                    list = TRUE)
-
-##------------------------------------------------------------------
-## set-up the fit parameters using the pre-selected (stratified) samples
-##------------------------------------------------------------------
-num.cv      <- 3
-num.repeat  <- 1
-num.total   <- num.cv * num.repeat
-
-## define the fit parameters
-fitControl <- trainControl(
-                    method="repeatedcv",
-                    number=num.cv,
-                    repeats=num.repeat,
-                    verboseIter=TRUE,
-                    classProbs=TRUE)
+## compute the expected values Nb, Ns ~ (411000, 692)
+xtabs(debugWeight ~ debugClass)
 
 
 ##------------------------------------------------------------------
-## perform the fit
-##  - "rf" required a purging of the missings
+## Test 1:  A completely random (and mis-balanced) benchmark
 ##------------------------------------------------------------------
-tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-1],
-                        y=trainClass.df[smp.idx[[1]],c("label")],
-                        method="svmRadial",
-                        trControl=fitControl,
-                        verbose=TRUE,
-                        tuneLength=5))
+debugRand   <- as.factor(sample(c("b","s"), length(debugClass), replace=TRUE))
+xtabs(debugWeight ~ debugRand)
+
+## step through the AMS calc (ams ~ 0.76 with matched sample size)
+w       <- debugWeight
+y_true  <- debugClass
+y_pred  <- debugRand
+
+tmp <- calcAms(y_pred=y_pred, y_true=y_true, w=w)
+
+
+##------------------------------------------------------------------
+## Test 2:  Same as Test 1, but with half the population
+##------------------------------------------------------------------
+idx_50  <- unlist(createDataPartition(y=debugClass, p=0.50))
+
+## step through the AMS calc (ams ~ 0.76 with 50% sample size)
+w       <- debugWeight[idx_50]
+y_true  <- debugClass[idx_50]
+y_pred  <- debugRand[idx_50]
+
+tmp <- calcAms(y_pred=y_pred, y_true=y_true, w=w)
+
+
+##------------------------------------------------------------------
+## Test 3:  Same as Test 1, but with 10% of the population
+##------------------------------------------------------------------
+idx_10  <- unlist(createDataPartition(y=debugClass, p=0.10))
+
+## step through the AMS calc (ams ~ 0.76 with 10% sample size)
+w       <- debugWeight[idx_10]
+y_true  <- debugClass[idx_10]
+y_pred  <- debugRand[idx_10]
+
+tmp <- calcAms(y_pred=y_pred, y_true=y_true, w=w)
+
+
+##------------------------------------------------------------------
+## Test 4:  Shuffle the actual weights
+##------------------------------------------------------------------
+shuffle.idx <- sample.int(length(debugClass), length(debugClass), replace=FALSE)
+
+## step through the AMS calc (ams ~ 0.63 with matched sample size)
+w       <- debugWeight
+y_true  <- debugClass
+y_pred  <- debugClass[shuffle.idx]
+
+tmp <- calcAms(y_pred=y_pred, y_true=y_true, w=w)
+
+
+
 
 
 

@@ -39,14 +39,30 @@ expandFactors   <- function(x, v="v")
 
 
 ##------------------------------------------------------------------
-## <function> :: calcAMS
+## <function> :: calcAms
 ##------------------------------------------------------------------
-calcAMS <- function(y_pred, y_true, w, numw=250000)
+calcAms <- function(y_pred, y_true, w, numw=250000)
 {
     wfac    <- numw/length(w)
     s       <- wfac*(w %*% ((as.character(y_true)=="s")*(as.character(y_pred)=="s")))
     b       <- wfac*(w %*% ((as.character(y_true)=="b")*(as.character(y_pred)=="s")))
-    br      <- 10
-    return(qrt(2*(((s+b+br)*log(1+(s/(b+br))))-s)))
+    ams     <- sqrt(2*((s+b+10)*log(1+s/(b+10))-s))
+    
+    cat("calcAMS :: wfac=",wfac," sig=",s," bkg=",b," ams=",ams,"\n")
+    return(ams)
 }
+
+
+##------------------------------------------------------------------
+## <function> :: calcAmsCutoff
+##------------------------------------------------------------------
+calcAmsCutoff <- function(mycutoff, myscore, y, w)
+{
+    ## presumes that, on average, score(b) < score(s)
+    yhat    <- as.factor(ifelse(myscore > mycutoff, "s", "b"))
+    ams     <- calcAms(yhat, y, w)
+    return(ams)
+}
+
+
 

@@ -106,6 +106,14 @@ if (length(highCor.train) > 0) {
     train.ex.rbc.lc.cor <- train.ex.rbc.lc
 }
 
+##------------------------------------------------------------------
+## Case 5:  Excluded ...
+##  - Redundant box-cox variables (i.e., the unscaled ones)
+##  - Linear combos of the flag variables
+##  - Exchange NA for -9.0 (an outlier given the ranges but not extreme)
+##------------------------------------------------------------------
+train.ex.rbc.lc.numna   <- train.ex.rbc.lc[,lapply(.SD, function(x){ifelse(is.na(x),-9.000,x)})]
+
 
 ##------------------------------------------------------------------
 ## Save the results to individual files
@@ -125,6 +133,9 @@ save(train.eval, train.ex.rbc.lc, file="04_HiggsTrainExRbcLc.Rdata")
 
 ## Train -> Case 4
 save(train.eval, train.ex.rbc.lc.cor, file="04_HiggsTrainExRbcLcCorr.Rdata")
+
+## Train -> Case 5
+save(train.eval, train.ex.rbc.lc.numna, file="04_HiggsTrainExRbcLcNumNa.Rdata")
 
 ## Test -- > Include all columns and filter upon evaluation)
 save(test.all, file="04_HiggsTestAll.Rdata")
