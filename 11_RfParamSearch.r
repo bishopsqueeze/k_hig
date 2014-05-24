@@ -62,7 +62,7 @@ trainDescr.df   <- as.data.frame(trainDescr)
 nr  <- dim(trainDescr.df)[1]
 
 ## number of samples to use for search
-ns  <- 25000
+ns  <- 100000
 
 ## define the partition index
 set.seed(88888888)
@@ -75,7 +75,7 @@ smp.idx    <- createDataPartition(
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 3
+num.cv      <- 5
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
@@ -97,7 +97,7 @@ tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-1],
                         method="rf",
                         trControl=fitControl,
                         verbose=TRUE,
-                        tuneLength=5))
+                        tuneLength=10))
 
 
 
