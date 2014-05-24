@@ -33,9 +33,13 @@ source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 ##------------------------------------------------------------------
 ## Load the training data
 ##------------------------------------------------------------------
-load("04_HiggsCaretProcTrain.Rdata")
-load("04_HiggsCaretProcTest.Rdata")
+loadfile <- "04_HiggsTrainExRbcLc.Rdata"
+load(loadfile)
 
+if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
+    trainDescr  <- train.ex.rbc.lc
+    trainClass  <- train.eval
+}
 
 ##******************************************************************
 ## Main
@@ -45,24 +49,32 @@ load("04_HiggsCaretProcTest.Rdata")
 ##
 ##------------------------------------------------------------------
 
-if (sum(train.sc[,eventid] - train.eval[,eventid]) == 0) {
-    train.sc[,eventid:=NULL]
-    train.eval[,eventid:=NULL]
+## check order of data
+if (sum(trainDescr[,eventid] - trainClass[,eventid]) == 0) {
+    trainDescr[,eventid:=NULL]
+    trainClass[,eventid:=NULL]
 }
 
 
 ## temporarily drop cols with NA
-na.cols     <- unlist(apply(train.sc, 2, function(x){sum(is.na(x))}))
-na.cols     <- names(na.cols[na.cols > 0])
-train.sc    <- train.sc[,-which(colnames(train.sc) %in% na.cols), with=FALSE]
+#na.cols     <- unlist(apply(train.sc, 2, function(x){sum(is.na(x))}))
+#na.cols     <- names(na.cols[na.cols > 0])
+#train.sc    <- train.sc[,-which(colnames(train.sc) %in% na.cols), with=FALSE]
 
 
 ##------------------------------------------------------------------
 ##
 ##------------------------------------------------------------------
-set.seed(123456789)
-reg.idx    <- createDataPartition(train.eval[,label], p=0.50, list=TRUE)
+nr  <- dim(trainDescr)[1]
+ns  <- 10000
 
+set.seed(123456789)
+smp.idx    <- createDataPartition(
+                    y=trainClass[,label],
+                    times = 1,
+                    p = 25000/nr,
+                    list = TRUE,
+                    groups = min(5, length(trainClass)))
 
 ##------------------------------------------------------------------
 ## set-up the tuning parameters
@@ -78,7 +90,7 @@ gbmGrid    <- expand.grid(
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
 num.cv      <- 10
-num.repeat  <- 3
+num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
 ## define the seeds to be used in the fits
@@ -97,8 +109,8 @@ fitControl <- trainControl(
 ##------------------------------------------------------------------
 ## perform the cross-validation fit
 ##------------------------------------------------------------------
-tmp.fit <- try(train(   x=as.data.frame(train.sc[reg.idx[[1]],]),
-                        y=as.factor(train.eval[reg.idx[[1]],label]),
+tmp.fit <- try(train(   x=as.data.frame(trainDescr[smp.idx[[1]],]),
+                        y=as.factor(trainClass[smp.idx[[1]],label]),
                         method="gbm",
                         trControl=fitControl,
                         verbose=TRUE,
