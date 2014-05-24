@@ -1,5 +1,6 @@
 ##------------------------------------------------------------------
-## From the kaggle website:
+## Load the raw data files from the Kaggle website into Rdata files
+## http://www.kaggle.com/c/higgs-boson/data
 ##------------------------------------------------------------------
 
 ##------------------------------------------------------------------
@@ -37,13 +38,10 @@ colnames(train.raw) <- tolower(colnames(train.raw))
 test.dt     <- data.table(test.raw)
 train.dt    <- data.table(train.raw)
 
-## define keys
-setkey(test.dt, eventid)
-setkey(train.dt, eventid)
-
 ## change to a new data directory
 setwd("/Users/alexstephens/Development/kaggle/higgs/data/proc")
 
 ## save results to separate files given the size
 save(test.dt,  file="01_HiggsRawTest.Rdata")
 save(train.dt, file="01_HiggsRawTrain.Rdata")
+

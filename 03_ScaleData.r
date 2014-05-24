@@ -1,5 +1,6 @@
 ##------------------------------------------------------------------
-## From the kaggle website:
+## Scale numeric variables (i.e., not binary flags) to have zero
+## mean and unit variance.
 ##------------------------------------------------------------------
 
 ##------------------------------------------------------------------
@@ -29,13 +30,18 @@ source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 load("02_HiggsPreProcTrain.Rdata")
 load("02_HiggsPreProcTest.Rdata")
 
+##------------------------------------------------------------------
+## Create a flag to enable plotting, etc.
+##------------------------------------------------------------------
+DO_PLOTS    <- TRUE
 
 ##******************************************************************
 ## Main
 ##******************************************************************
 
 ##------------------------------------------------------------------
-## Step 0: Combine training and test data
+## Step 0: Combine training and test data into a single file so that
+## you include the entire range when scaling observations
 ##------------------------------------------------------------------
 
 ## an id column to each subset of data
@@ -44,23 +50,21 @@ test.pp[,id:=c("te")]
 
 ## combine the datasets
 comb.pp <- rbind(train.pp, test.pp)
-setkey(comb.pp, eventid)
-
-## identify columns you plot
-noplot.idx <- c(
-                    grep("id", colnames(comb.pp)),
-                    grep(".fl$", colnames(comb.pp)),
-                    grep(".[0-9]$", colnames(comb.pp))
-                )
 
 
 ##------------------------------------------------------------------
 ## Step 1:  Plot histograms of the data
 ##------------------------------------------------------------------
-
-## loop over the variables and plot histograms of the data
-plotvars    <- colnames(comb.pp)[-noplot.idx]
-plotdir     <- "/Users/alexstephens/Development/kaggle/higgs/figs/"
+if (DO_PLOTS) {
+    
+    ## identify columns *not* to be plotted
+    noplot.idx <- c(    grep("id", colnames(comb.pp)),
+                        grep(".fl$", colnames(comb.pp)),
+                        grep(".[0-9]$", colnames(comb.pp)))
+    
+    ## loop over the variables and plot histograms of the data
+    plotvars    <- colnames(comb.pp)[-noplot.idx]
+    plotdir     <- "/Users/alexstephens/Development/kaggle/higgs/figs/"
 
     for (i in 1:length(plotvars)) {
         tmp.plotvar     <- plotvars[i]
@@ -69,6 +73,7 @@ plotdir     <- "/Users/alexstephens/Development/kaggle/higgs/figs/"
             hist(unlist(comb.pp[,tmp.plotvar,with=FALSE]), breaks=100, col="steelblue", xlab=tmp.plotvar, main="")
         dev.off()
     }
+}
 
 
 ##------------------------------------------------------------------
@@ -83,19 +88,22 @@ boxcox.cols  <- c(  "der_deltaeta_jet_jet", "der_mass_jet_jet",
                     "pri_jet_leading_pt", "pri_jet_subleading_pt","pri_lep_pt",
                     "pri_met_sumet", "pri_met", "pri_tau_pt")
 
-## do the transform
+## box-cox pre-processing step
 boxcox.pp  <- preProcess(comb.pp[,boxcox.cols,with=FALSE], method = "BoxCox")
 
 ## perform the transformation
 boxcox.df           <- predict(boxcox.pp, comb.pp[,boxcox.cols,with=FALSE])
 colnames(boxcox.df) <- paste(colnames(boxcox.df),".bc",sep="")
 
-## drop the originals and append the results
-comb.bc <- cbind(comb.pp[,-which(colnames(comb.pp) %in% boxcox.cols),with=FALSE], boxcox.df)
+## append the results (define what to keep/drop later)
+#comb.bc <- cbind(comb.pp[,-which(colnames(comb.pp) %in% boxcox.cols),with=FALSE], boxcox.df)
+comb.bc <- cbind(comb.pp, boxcox.df)
 
 ## loop over the variables and plot histograms of the box-cox transformed data
-plotvars    <- colnames(comb.bc)[grep(".bc$",colnames(comb.bc))]
-plotdir     <- "/Users/alexstephens/Development/kaggle/higgs/figs/"
+if (DO_PLOTS) {
+
+    plotvars    <- colnames(comb.bc)[grep(".bc$",colnames(comb.bc))]
+    plotdir     <- "/Users/alexstephens/Development/kaggle/higgs/figs/"
 
     for (i in 1:length(plotvars)) {
         tmp.plotvar     <- plotvars[i]
@@ -104,14 +112,14 @@ plotdir     <- "/Users/alexstephens/Development/kaggle/higgs/figs/"
         hist(unlist(comb.bc[,tmp.plotvar,with=FALSE]), breaks=100, col="orange", xlab=tmp.plotvar, main="")
         dev.off()
     }
-
+}
 
 
 ##------------------------------------------------------------------
 ## Step 3:  Scale the data
 ##------------------------------------------------------------------
 
-## re-identify the columns to scale in the .bc matrix
+## identify the columns *not* to scale in the .bc matrix
 noscale.idx <- c(
                     grep("id", colnames(comb.bc)),
                     grep(".fl$", colnames(comb.bc)),
@@ -123,22 +131,13 @@ comb.sc <- cbind(
                     comb.bc[,noscale.idx,with=FALSE],
                     data.table(scale(comb.bc[,-noscale.idx,with=FALSE]))
                 )
-setkey(comb.sc,"id")
-
-##------------------------------------------------------------------
-## Step 5:  Mode replace the missings [???]
-##------------------------------------------------------------------
-
-## identify columns with missings
-#na.cols <- unlist(apply(as.matrix(comb.bc[reg.idx[[1]],]), 2, function(x){sum(is.na(x))}))
-
-#for (i in 1:length(na.cols)) {
-#
-#}
 
 ##------------------------------------------------------------------
 ## Step 4:  Break back into train and test datasets
 ##------------------------------------------------------------------
+
+## define the key
+setkey(comb.sc,"id")
 
 ## use the id key to split
 train.sc    <- comb.sc["tr"]
