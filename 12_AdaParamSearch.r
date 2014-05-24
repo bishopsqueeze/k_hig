@@ -13,7 +13,7 @@ library(doMC)
 ##------------------------------------------------------------------
 ## register cores
 ##------------------------------------------------------------------
-registerDoMC(2)
+registerDoMC(4)
 
 ##------------------------------------------------------------------
 ## Clear the workspace
@@ -46,45 +46,28 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
 ##******************************************************************
 
 ##------------------------------------------------------------------
-##
+## Transform data to data.frame for the fitting procedure
 ##------------------------------------------------------------------
-
-## check order of data
-#if (sum(trainDescr[,eventid] - trainClass[,eventid]) == 0) {
-#    trainDescr[,eventid:=NULL]
-#    trainClass[,eventid:=NULL]
-#}
-
-
-## temporarily drop cols with NA
-#na.cols     <- unlist(apply(train.sc, 2, function(x){sum(is.na(x))}))
-#na.cols     <- names(na.cols[na.cols > 0])
-#train.sc    <- train.sc[,-which(colnames(train.sc) %in% na.cols), with=FALSE]
-
+trainClass.df   <- as.data.frame(trainClass)
+trainDescr.df   <- as.data.frame(trainDescr)
 
 ##------------------------------------------------------------------
-##
+## Use a subset of the available data for the parameter search phase
 ##------------------------------------------------------------------
-nr  <- dim(trainDescr)[1]
-ns  <- 10000
 
-set.seed(123456789)
+## number of rows in the training data
+nr  <- dim(trainDescr.df)[1]
+
+## number of samples to use for search
+ns  <- 50000
+
+## define the partition index
+set.seed(88888888)
 smp.idx    <- createDataPartition(
-                    y=trainClass[,label],
-                    times = 1,
-                    p = 25000/nr,
-                    list = TRUE,
-                    groups = min(5, length(trainClass)))
-
-##------------------------------------------------------------------
-## set-up the tuning parameters
-##------------------------------------------------------------------
-gbmGrid    <- expand.grid(
-                    .interaction.depth = c(2,3),
-                    .n.trees = c(5, 10, 25, 50),
-                    .shrinkage = c(0.01))
-
-
+                    y=trainClass.df[,c("label")],
+                    times=1,
+                    p = (ns/nr),
+                    list = TRUE)
 
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
@@ -93,50 +76,24 @@ num.cv      <- 3
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
-## define the seeds to be used in the fits
-#set.seed(123456789)
-#seeds                               <- vector(mode = "list", length = (num.total + 1))
-#for(k in 1:num.total) seeds[[k]]    <- sample.int(1000, nrow(gbmGrid))
-#seeds[[num.total+1]]                <- sample.int(1000, 1)
-
 ## define the fit parameters
 fitControl <- trainControl(
                     method="repeatedcv",
                     number=num.cv,
                     repeats=num.repeat,
+                    verboseIter=TRUE,
                     classProbs=TRUE)
 
-##------------------------------------------------------------------
-## prep the data for fit
-##------------------------------------------------------------------
-trainClass.df   <- as.data.frame(trainClass)
-trainDescr.df   <- as.data.frame(trainDescr)
 
 ##------------------------------------------------------------------
-## perform the cross-validation fit
+## perform the fit
 ##------------------------------------------------------------------
-tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-grep("eventid",colnames(trainDescr))],
-                        y=trainClass.df[smp.idx[[1]],c("label")],
-                        method="gbm",
-                        trControl=fitControl,
-                        verbose=TRUE,
-                        tuneLength=5))
-
-tmp.pred <- predict(tmp.fit)
-tmp.true <- unlist(trainClass[smp.idx[[1]],label])
-
-##------------------------------------------------------------------
-## perform the cross-validation fit
-##------------------------------------------------------------------
-tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-grep("eventid",colnames(trainDescr))],
+tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-1],
                         y=trainClass.df[smp.idx[[1]],c("label")],
                         method="ada",
                         trControl=fitControl,
                         verbose=TRUE,
                         tuneLength=5))
-
-
-
 
 
 

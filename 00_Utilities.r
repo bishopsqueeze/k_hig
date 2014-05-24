@@ -37,3 +37,16 @@ expandFactors   <- function(x, v="v")
     return(mat)
 }
 
+
+##------------------------------------------------------------------
+## <function> :: calcAMS
+##------------------------------------------------------------------
+calcAMS <- function(y_pred, y_true, w, numw=250000)
+{
+    wfac    <- numw/length(w)
+    s       <- wfac*(w %*% ((as.character(y_true)=="s")*(as.character(y_pred)=="s")))
+    b       <- wfac*(w %*% ((as.character(y_true)=="b")*(as.character(y_pred)=="s")))
+    br      <- 10
+    return(qrt(2*(((s+b+br)*log(1+(s/(b+br))))-s)))
+}
+
