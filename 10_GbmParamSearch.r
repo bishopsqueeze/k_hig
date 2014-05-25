@@ -108,7 +108,7 @@ nGrid   <- length(gbmGrid)
 for (i in 1:nGrid) {
     
     ## define a filename
-    tmp.filename <- paste("gbm_sweep_depth",gbmGrid[i,1],"_trees",gbmGrid[i,2],"_shrink",gbmGrid[i,3],".Rdata",sep="")
+    tmp.filename <- paste("gbm_sweep_depth",gbmGrid[i,1],"_trees",gbmGrid[i,2],"_shrink",gsub("\\.","",as.character(gbmGrid[i,3])),".Rdata",sep="")
     
     ## perform the fit
     tmp.fit      <- try(train(  x=sampDescr[,-1],
