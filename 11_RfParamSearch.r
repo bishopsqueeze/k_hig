@@ -79,12 +79,6 @@ holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
 sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
 sampClass    <- trainClass.df[  samp.idx$Resample1, ]
 
-## for sweeps create a parameter grid and then step through each one,
-## saving interim results so it doesn;t crap out on you and you can monitor
-## progress
-
-rfGrid  <- expand.grid(.mtry=)
-
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
@@ -100,14 +94,38 @@ fitControl <- trainControl(
                     savePredictions=FALSE)
 
 ##------------------------------------------------------------------
+## for sweeps create a parameter grid and then step through each one,
+## saving interim results so it doesn;t crap out on you and you can
+## monitor progress
+##------------------------------------------------------------------
+rfGrid  <- expand.grid(.mtry=c(10,15,20))
+nGrid   <- length(rfGrid)
+
+##------------------------------------------------------------------
 ## perform the fit
 ##------------------------------------------------------------------
-tmp.fit <- try(train(   x=sampDescr[,-1],
-                        y=sampClass[,c("label")],
-                        method="rf",
-                        trControl=fitControl,
-                        verbose=TRUE,
-                        tuneGrid=data.frame(.mtry=15)))
+for (i in 1:nGrid) {
+    
+    ## define a filename
+    tmp.filename <- paste("rf_sweep_mtry",rfGrid[1,i],".Rdata",sep="")
+    
+    ## perform the fit
+    tmp.fit      <- try(train(   x=sampDescr[,-1],
+                                 y=sampClass[,c("label")],
+                                 method="rf",
+                                 trControl=fitControl,
+                                 verbose=TRUE,
+                                 tuneGrid=data.frame(.mtry=rfGrid[i,])))
+   
+   ## score the hold-out sample & compute the AMS curve
+   tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
+   tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
+   tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
+   tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+   
+   ## save the results
+   save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+}
 
 
 
