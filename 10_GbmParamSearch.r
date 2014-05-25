@@ -100,10 +100,10 @@ fitControl <- trainControl(
 ## monitor progress
 ##------------------------------------------------------------------
 gbmGrid <- expand.grid(.interaction.depth=9, .n.trees=c(450), .shrinkage=c(.01,.05,.1,.2))
-nGrid   <- length(gbmGrid)
+nGrid   <- dim(gbmGrid)[1]
 
 ##------------------------------------------------------------------
-## perform the fit
+## perform the fit #### CHANGE LOOP BACK TO 1 ###
 ##------------------------------------------------------------------
 for (i in 1:nGrid) {
     
