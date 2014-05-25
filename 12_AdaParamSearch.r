@@ -98,7 +98,11 @@ fitControl <- trainControl(
 ## saving interim results so it doesn;t crap out on you and you can
 ## monitor progress
 ##------------------------------------------------------------------
-adaGrid  <- expand.grid(.maxdepth = c(1,3,5), .iter = c(150,200,250,300), .nu = c(0.05,0.1,0.2,0.3,0.4,0.5) )
+
+## [1] First pass (incomplete) to search this grid
+##adaGrid  <- expand.grid(.maxdepth = c(1,3,5), .iter = c(150,200,250,300), .nu = c(0.1,0.3,0.5) )
+## [2] Depth test
+adaGrid  <- expand.grid(.maxdepth = c(1,5,10,20,30), .iter = c(150), .nu = c(1) )
 nGrid   <- dim(adaGrid)[1]
 
 ##------------------------------------------------------------------
@@ -107,7 +111,7 @@ nGrid   <- dim(adaGrid)[1]
 for (i in 1:nGrid) {
     
     ## define a filename
-    tmp.filename <- paste("ada_sweep_depth",adaGrid[i,1],"_iter",adaGrid[i,2],"_nu",adaGrid[i,3],".Rdata",sep="")
+    tmp.filename <- paste("ada_sweep_depth",adaGrid[i,1],"_iter",adaGrid[i,2],"_nu",gsub("\\.","",as.character(adaGrid[i,3])),".Rdata",sep="")
     
     ## perform the fit
     tmp.fit      <- try(train(   x=sampDescr[,-1],
@@ -129,3 +133,32 @@ for (i in 1:nGrid) {
     ## save the results
     save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
 }
+
+###----- DEBUG
+
+##------------------------------------------------------------------
+## set-up the fit parameters using the pre-selected (stratified) samples
+##------------------------------------------------------------------
+num.cv      <- 3
+num.repeat  <- 1
+num.total   <- num.cv * num.repeat
+
+## define the fit parameters
+fitControl <- trainControl(
+method="cv",
+number=num.cv,
+verboseIter=TRUE,
+savePredictions=FALSE)
+
+## perform the fit
+tmp.fit      <- try(train(   x=sampDescr[,-1],
+y=sampClass[,c("label")],
+method="ada",
+trControl=fitControl,
+verbose=TRUE,
+tuneLength=3,
+))
+
+
+
+
