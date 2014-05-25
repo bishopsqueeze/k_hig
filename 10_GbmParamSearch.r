@@ -99,12 +99,19 @@ fitControl <- trainControl(
 ## saving interim results so it doesn;t crap out on you and you can
 ## monitor progress
 ##------------------------------------------------------------------
-gbmGrid <- expand.grid(.interaction.depth=9, .n.trees=c(450), .shrinkage=c(.01,.05,.1,.2))
-nGrid   <- length(gbmGrid)
+
+## [1] Tested after identifying 9/450 via an early sweep
+## gbmGrid <- expand.grid(.interaction.depth=9, .n.trees=c(450), .shrinkage=c(.01,.05,.1,.2))
+## [2] Tested after 0.05 yielded the best accuracy/ams
+## gbmGrid <- expand.grid(.interaction.depth=c(9,10), .n.trees=c(400,450,500), .shrinkage=c(.05))
+## [3] Tested after 0.05/450/9 yielded the best accuracy/ams
+gbmGrid <- expand.grid(.interaction.depth=c(8,9), .n.trees=c(450), .shrinkage=c(0.04,0.05,0.06))
+
 
 ##------------------------------------------------------------------
 ## perform the fit
 ##------------------------------------------------------------------
+nGrid <- dim(gbmGrid)[1]
 for (i in 1:nGrid) {
     
     ## define a filename
