@@ -9,6 +9,7 @@ library(data.table)
 library(caret)
 library(foreach)
 library(doMC)
+library(kernlab)
 
 ##------------------------------------------------------------------
 ## register cores
@@ -91,6 +92,7 @@ fitControl <- trainControl(
                         method="cv",
                         number=num.cv,
                         verboseIter=TRUE,
+                        classProbs = TRUE,
                         savePredictions=FALSE)
 
 ##------------------------------------------------------------------
@@ -101,13 +103,13 @@ fitControl <- trainControl(
 sigmas   <- sigest(as.matrix(sampDescr[,-1]), na.action = na.omit, scaled = TRUE)    ## from kernlab
 sigmaf   <- mean(sigmas[-2])
 
-svmGrid  <- expand.grid(.sigma = sigmaf, .C = 2^(1:7))
+svmGrid  <- expand.grid(.sigma = c(sigmaf), .C = 2^(1:8))
 nGrid    <- dim(svmGrid)[1]
 
 ##------------------------------------------------------------------
 ## perform the fit
 ##------------------------------------------------------------------
-for (i in 1:nGrid) {
+for (i in 2:nGrid) {
     
     ## define a filename
     tmp.filename <- paste("svm_sweep_sigma",gsub("\\.","",as.character(svmGrid[i,1])),"_Cost",svmGrid[i,2],".Rdata",sep="")
@@ -131,3 +133,4 @@ for (i in 1:nGrid) {
     ## save the results
     save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
 }
+
