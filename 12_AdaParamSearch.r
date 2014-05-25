@@ -33,13 +33,20 @@ source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 ##------------------------------------------------------------------
 ## Load the training data
 ##------------------------------------------------------------------
-loadfile <- "04_HiggsTrainExRbcLc.Rdata"
+loadfile <- "04_HiggsTrainExRbcLcNumNa.Rdata"
 load(loadfile)
 
 if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
     trainDescr  <- train.ex.rbc.lc
     trainClass  <- train.eval
+} else if (loadfile == c("04_HiggsTrainExRbcNas.Rdata")) {
+    trainDescr  <- train.ex.rbc.nas
+    trainClass  <- train.eval
+} else if (loadfile == c("04_HiggsTrainExRbcLcNumNa.Rdata")) {
+    trainDescr  <- train.ex.rbc.lc.numna
+    trainClass  <- train.eval
 }
+
 
 ##******************************************************************
 ## Main
@@ -55,45 +62,70 @@ trainDescr.df   <- as.data.frame(trainDescr)
 ## Use a subset of the available data for the parameter search phase
 ##------------------------------------------------------------------
 
-## number of rows in the training data
-nr  <- dim(trainDescr.df)[1]
+## define the fraction to use as a hold-out sample
+p_ho    <- 0.80     ## use large fraction for sweeps
 
-## number of samples to use for search
-ns  <- 100000
-
-## define the partition index
+## define a partition index
 set.seed(88888888)
-smp.idx    <- createDataPartition(
-                    y=trainClass.df[,c("label")],
-                    times=1,
-                    p = (ns/nr),
-                    list = TRUE)
+samp.idx    <- createDataPartition(
+                            y=trainClass.df[,c("label")],
+                            times=1,
+                            p = (1-p_ho),
+                            list = TRUE)
+
+## split data into training & hold-out
+holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
+holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
+sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
+sampClass    <- trainClass.df[  samp.idx$Resample1, ]
 
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 5
+num.cv      <- 10
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
 ## define the fit parameters
 fitControl <- trainControl(
-                    method="repeatedcv",
+                    method="cv",
                     number=num.cv,
-                    repeats=num.repeat,
                     verboseIter=TRUE,
-                    classProbs=TRUE)
+                    savePredictions=FALSE)
+
+##------------------------------------------------------------------
+## for sweeps create a parameter grid and then step through each one,
+## saving interim results so it doesn;t crap out on you and you can
+## monitor progress
+##------------------------------------------------------------------
+adaGrid  <- expand.grid(.maxdepth = c(1,3,5), .iter = c(150,200,250,300), .nu = c(0.05,0.1,0.2,0.3,0.4,0.5) )
+nGrid   <- dim(adaGrid)[1]
 
 ##------------------------------------------------------------------
 ## perform the fit
 ##------------------------------------------------------------------
-tmp.fit <- try(train(   x=trainDescr.df[smp.idx[[1]],-1],
-                        y=trainClass.df[smp.idx[[1]],c("label")],
-                        method="ada",
-                        trControl=fitControl,
-                        verbose=TRUE,
-                        tuneLength=10))
-
-
-
-
+for (i in 1:nGrid) {
+    
+    ## define a filename
+    tmp.filename <- paste("ada_sweep_depth",adaGrid[i,1],"_iter",adaGrid[i,2],"_nu",adaGrid[i,3],".Rdata",sep="")
+    
+    ## perform the fit
+    tmp.fit      <- try(train(   x=sampDescr[,-1],
+                                y=sampClass[,c("label")],
+                                method="ada",
+                                trControl=fitControl,
+                                verbose=TRUE,
+                                tuneGrid=data.frame(.maxdepth=adaGrid[i,1], .iter=adaGrid[i,2], .nu=adaGrid[i,3]),
+                                type="discrete",
+                                loss="exponential"
+                                ))
+    
+    ## score the hold-out sample & compute the AMS curve
+    tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
+    tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
+    tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
+    tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+    
+    ## save the results
+    save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+}

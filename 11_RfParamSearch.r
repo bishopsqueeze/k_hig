@@ -99,7 +99,7 @@ fitControl <- trainControl(
 ## monitor progress
 ##------------------------------------------------------------------
 rfGrid  <- expand.grid(.mtry=c(10,15,20))
-nGrid   <- length(rfGrid)
+nGrid   <- dim(rfGrid)[1]
 
 ##------------------------------------------------------------------
 ## perform the fit
@@ -107,7 +107,7 @@ nGrid   <- length(rfGrid)
 for (i in 1:nGrid) {
     
     ## define a filename
-    tmp.filename <- paste("rf_sweep_mtry",rfGrid[1,i],".Rdata",sep="")
+    tmp.filename <- paste("rf_sweep_mtry",rfGrid[i,1],".Rdata",sep="")
     
     ## perform the fit
     tmp.fit      <- try(train(   x=sampDescr[,-1],
