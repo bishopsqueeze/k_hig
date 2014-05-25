@@ -104,10 +104,10 @@ nGrid   <- dim(rfGrid)[1]
 ##------------------------------------------------------------------
 ## perform the fit
 ##------------------------------------------------------------------
-for (i in 2:nGrid) {
+for (i in 1:nGrid) {
     
     ## define a filename
-    tmp.filename <- paste("rf_sweep_mtry",rfGrid[1,i],".Rdata",sep="")
+    tmp.filename <- paste("rf_sweep_mtry",rfGrid[i,1],".Rdata",sep="")
     
     ## perform the fit
     tmp.fit      <- try(train(   x=sampDescr[,-1],
