@@ -30,7 +30,6 @@ setwd("/Users/alexstephens/Development/kaggle/higgs/data/proc")
 ##------------------------------------------------------------------
 source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 
-
 ##------------------------------------------------------------------
 ## Load the training data
 ##------------------------------------------------------------------
@@ -48,7 +47,6 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
     trainClass  <- train.eval
 }
 
-
 ##******************************************************************
 ## Main
 ##******************************************************************
@@ -60,46 +58,15 @@ trainClass.df   <- as.data.frame(trainClass)
 trainDescr.df   <- as.data.frame(trainDescr)
 
 ##------------------------------------------------------------------
-## Use a subset of the available data for the parameter search phase
-##------------------------------------------------------------------
-
-## define the fraction to use as a hold-out sample
-
-p_ho    <- 0.10     ## small fraction for fitting
-
-
-#
-# Note:  will want to create a top-level loop so that you
-#        repeatedly re-estimate with different set of the data
-#        (effectively CV) ... and merge the final fit as an
-#        ensemble across the models ... for now just check to
-#        see that we get some [!?] improvement using a single fit
-#
-#
-
-
-## define a partition index
-set.seed(88888888)
-samp.idx    <- createDataPartition(
-                            y=trainClass.df[,c("label")],
-                            times=1,
-                            p = (1-p_ho),
-                            list = TRUE)
-
-## split data into training & hold-out
-holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
-holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
-sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
-sampClass    <- trainClass.df[  samp.idx$Resample1, ]
-
-##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
 num.cv      <- 10
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
-## define the fit parameters
+##------------------------------------------------------------------
+## define the fit control parameters
+##------------------------------------------------------------------
 fitControl <- trainControl(
                     method="cv",
                     number=num.cv,
@@ -107,35 +74,62 @@ fitControl <- trainControl(
                     savePredictions=FALSE)
 
 ##------------------------------------------------------------------
-## for sweeps create a parameter grid and then step through each one,
-## saving interim results so it doesn;t crap out on you and you can
-## monitor progress
+## for full fits use the best model from the sweeps
 ##------------------------------------------------------------------
 gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(450), .shrinkage=c(0.05))
 nGrid   <- dim(gbmGrid)[1]
 
 ##------------------------------------------------------------------
-## perform the fit
+## perform the fit; to avoid biases fit the model k times and then
+## at some point combine the k versions to create the predicted
+## outcome (because the true peak may be noisy)
 ##------------------------------------------------------------------
 
-## define a filename
-tmp.filename <- paste("gbm_full_depth",gbmGrid[i,1],"_trees",gbmGrid[i,2],"_shrink",gbmGrid[i,3],".Rdata",sep="")
+## set a seed
+set.seed(4321)
 
-## perform the fit
-tmp.fit      <- try(train(  x=sampDescr[,-1],
-                            y=sampClass[,c("label")],
-                            method="gbm",
-                            trControl=fitControl,
-                            verbose=TRUE,
-                            tuneGrid=data.frame(.interaction.depth=gbmGrid[i,1], .n.trees=gbmGrid[i,2], .shrinkage=gbmGrid[i,3])
-                            ))
+## number of iterations to make
+numFolds <- 10
 
-## score the hold-out sample & compute the AMS curve
-tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
-tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
-tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
-tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+## loop over the iterations and do a full fit
+for (i in 2:numFolds) {
+   
+    ## define a filename
+    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_fold",i,".Rdata",sep="")
+   
+    ## define a partition index using the full dataset
+    samp.idx    <- createDataPartition(
+                                        y=trainClass.df[,c("label")],
+                                        times=1,
+                                        p = (1-(1/numFolds)),
+                                        list = TRUE)
+    
+    ## split the full dataset into training & hold-out
+    holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
+    holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
+    sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
+    sampClass    <- trainClass.df[  samp.idx$Resample1, ]
+    
+    ## perform the fit using the training data
+    tmp.fit      <- try(train(  x=sampDescr[,-1],
+                               y=sampClass[,c("label")],
+                               method="gbm",
+                               trControl=fitControl,
+                               verbose=TRUE,
+                               tuneGrid=data.frame(.interaction.depth=gbmGrid[1,1], .n.trees=gbmGrid[1,2], .shrinkage=gbmGrid[1,3])
+                               ))
+   
+    ## score the hold-out sample & compute the AMS curve
+    tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
+    tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
+    tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
+    tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
 
-## save the results
-#save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+    ## save the results
+    save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+
+}
+
+
+
 
