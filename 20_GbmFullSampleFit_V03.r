@@ -125,7 +125,7 @@ num.iter   <- 10
 ##------------------------------------------------------------------
 ## loop over each fold and do a fit
 ##------------------------------------------------------------------
-for (i in 1:num.iter) {
+for (i in 2:num.iter) {
 
     ## define an output filename
     tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_fold",i,"_V03.Rdata",sep="")
@@ -142,8 +142,8 @@ for (i in 1:num.iter) {
                                 tuneGrid=data.frame(.interaction.depth=gbmGrid[1,1], .n.trees=gbmGrid[1,2], .shrinkage=gbmGrid[1,3])
                                 ))
 
-    hold.score      <- predict(tmp.fit, newdata=hoDescr[tmp.idx,-1], type="prob")[,c("s")]
-    hold.pred       <- predict(tmp.fit, newdata=hoDescr[tmp.idx,-1])
+    hold.score      <- predict(tmp.fit, newdata=hoDescr[,-1], type="prob")[,c("s")]
+    hold.pred       <- predict(tmp.fit, newdata=hoDescr[,-1])
     hold.breaks     <- quantile(hold.score, probs=seq(0,1,0.01))
     hold.ams        <- sapply(hold.breaks, calcAmsCutoff, hold.score, hoClass[,"label"], hoClass[,"weight"])
 
