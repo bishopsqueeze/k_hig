@@ -62,6 +62,15 @@ trainDescr.df   <- as.data.frame(trainDescr)
 ## Use a subset of the available data for the parameter search phase
 ##------------------------------------------------------------------
 
+
+#
+# $
+#   $
+#       $ change back to 0.80 for tests
+#
+#
+#
+
 ## define the fraction to use as a hold-out sample
 p_ho    <- 0.80     ## use large fraction for sweeps
 
@@ -101,8 +110,10 @@ fitControl <- trainControl(
 
 ## [1] First pass (incomplete) to search this grid
 ##adaGrid  <- expand.grid(.maxdepth = c(1,3,5), .iter = c(150,200,250,300), .nu = c(0.1,0.3,0.5) )
-## [2] Depth test
-adaGrid  <- expand.grid(.maxdepth = c(1,5,10,20,30), .iter = c(150), .nu = c(1) )
+## [2] Depth test #1
+##adaGrid  <- expand.grid(.maxdepth = c(1,5,10,20,30), .iter = c(150), .nu = c(1) )
+## [3] Depth test #2
+adaGrid  <- expand.grid(.maxdepth = c(5,7,9,11,13), .iter = c(150), .nu = c(0.1) )
 nGrid   <- dim(adaGrid)[1]
 
 ##------------------------------------------------------------------
@@ -134,30 +145,33 @@ for (i in 1:nGrid) {
     save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
 }
 
+
+
+
 ###----- DEBUG
 
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 3
-num.repeat  <- 1
-num.total   <- num.cv * num.repeat
+#num.cv      <- 3
+#num.repeat  <- 1
+#num.total   <- num.cv * num.repeat
 
 ## define the fit parameters
-fitControl <- trainControl(
-method="cv",
-number=num.cv,
-verboseIter=TRUE,
-savePredictions=FALSE)
+#fitControl <- trainControl(
+#method="cv",
+#number=num.cv,
+#verboseIter=TRUE,
+#savePredictions=FALSE)
 
 ## perform the fit
-tmp.fit      <- try(train(   x=sampDescr[,-1],
-y=sampClass[,c("label")],
-method="ada",
-trControl=fitControl,
-verbose=TRUE,
-tuneLength=3,
-))
+#tmp.fit      <- try(train(   x=sampDescr[,-1],
+#y=sampClass[,c("label")],
+#method="ada",
+#trControl=fitControl,
+#verbose=TRUE,
+#tuneLength=4,
+#))
 
 
 

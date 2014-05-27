@@ -52,26 +52,34 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
 ##******************************************************************
 
 ##------------------------------------------------------------------
-## Transform data to data.frame for the fitting procedure
+## In this iteration, we will do the following:
+##  1. Use 10-fold cross validation on the entire dataset
+##  2. Score each hold-out fold
+##
+## Since we are manually doing the folds, fit all datapoints
 ##------------------------------------------------------------------
-trainClass.df   <- as.data.frame(trainClass)
-trainDescr.df   <- as.data.frame(trainDescr)
 
 ##------------------------------------------------------------------
-## set-up the fit parameters using the pre-selected (stratified) samples
+## use common naming for the train data.frame
 ##------------------------------------------------------------------
-num.cv      <- 10
-num.repeat  <- 1
-num.total   <- num.cv * num.repeat
+trainDescr  <- as.data.frame(trainDescr)
+trainClass  <- as.data.frame(trainClass)
 
 ##------------------------------------------------------------------
-## define the fit control parameters
+## define the fit control parameters (note the use of "none")
 ##------------------------------------------------------------------
-fitControl <- trainControl(
-                    method="cv",
-                    number=num.cv,
-                    verboseIter=TRUE,
-                    savePredictions=FALSE)
+fitControl  <- trainControl(method="none", savePredictions=FALSE)
+
+##------------------------------------------------------------------
+## define the number of folds to use
+##------------------------------------------------------------------
+num.folds   <- 10
+
+##------------------------------------------------------------------
+## create a set of folds & verify fold proportions
+##------------------------------------------------------------------
+fold.idx    <- createFolds(trainClass$label, k=num.folds, list=TRUE, returnTrain=FALSE)
+## do.call("rbind",lapply(fold.idx, function(x){prop.table(table(trainClass[x,"label"]))}))
 
 ##------------------------------------------------------------------
 ## for full fits use the best model from the sweeps
@@ -80,56 +88,34 @@ gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(450), .shrinkage=c(0.
 nGrid   <- dim(gbmGrid)[1]
 
 ##------------------------------------------------------------------
-## perform the fit; to avoid biases fit the model k times and then
-## at some point combine the k versions to create the predicted
-## outcome (because the true peak may be noisy)
+## loop over each fold and do a fit
 ##------------------------------------------------------------------
+for (i in 1:num.folds) {
 
-## set a seed
-set.seed(4321)
+    ## define an output filename
+    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_fold",i,"_V02.Rdata",sep="")
 
-## number of iterations to make
-numFolds <- 10
-
-## loop over the iterations and do a full fit
-for (i in 2:numFolds) {
-   
-    ## define a filename
-    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_fold",i,".Rdata",sep="")
-   
-    ## define a partition index using the full dataset
-    samp.idx    <- createDataPartition(
-                                        y=trainClass.df[,c("label")],
-                                        times=1,
-                                        p = (1-(1/numFolds)),
-                                        list = TRUE)
-    
-    ## split the full dataset into training & hold-out
-    holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
-    holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
-    sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
-    sampClass    <- trainClass.df[  samp.idx$Resample1, ]
+    ## load the fold index
+    tmp.idx      <- fold.idx[[i]]
     
     ## perform the fit using the training data
-    tmp.fit      <- try(train(  x=sampDescr[,-1],
-                               y=sampClass[,c("label")],
-                               method="gbm",
-                               trControl=fitControl,
-                               verbose=TRUE,
-                               tuneGrid=data.frame(.interaction.depth=gbmGrid[1,1], .n.trees=gbmGrid[1,2], .shrinkage=gbmGrid[1,3])
-                               ))
-   
-    ## score the hold-out sample & compute the AMS curve
-    tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
-    tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
-    tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
-    tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+    tmp.fit      <- try(train(  x=trainDescr[-tmp.idx,-1],
+                                y=trainClass[-tmp.idx,c("label")],
+                                method="gbm",
+                                trControl=fitControl,
+                                verbose=TRUE,
+                                tuneGrid=data.frame(.interaction.depth=gbmGrid[1,1], .n.trees=gbmGrid[1,2], .shrinkage=gbmGrid[1,3])
+                                ))
+
+    hold.score      <- predict(tmp.fit, newdata=trainDescr[tmp.idx,-1], type="prob")[,c("s")]
+    hold.pred       <- predict(tmp.fit, newdata=trainDescr[tmp.idx,-1])
+    hold.breaks     <- quantile(hold.score, probs=seq(0,1,0.01))
+    hold.ams        <- sapply(hold.breaks, calcAmsCutoff, hold.score, trainClass[tmp.idx,"label"], trainClass[tmp.idx,"weight"])
 
     ## save the results
-    save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+    save(tmp.fit, fold.idx, tmp.idx, hold.score, hold.ams, file=tmp.filename)
 
 }
-
 
 
 

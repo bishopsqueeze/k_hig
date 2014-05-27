@@ -47,7 +47,6 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
     trainClass  <- train.eval
 }
 
-
 ##******************************************************************
 ## Main
 ##******************************************************************
@@ -59,34 +58,15 @@ trainClass.df   <- as.data.frame(trainClass)
 trainDescr.df   <- as.data.frame(trainDescr)
 
 ##------------------------------------------------------------------
-## Use a subset of the available data for the parameter search phase
-##------------------------------------------------------------------
-
-## define the fraction to use as a hold-out sample
-p_ho    <- 0.80     ## use large fraction for sweeps
-
-## define a partition index
-set.seed(88888888)
-samp.idx    <- createDataPartition(
-                            y=trainClass.df[,c("label")],
-                            times=1,
-                            p = (1-p_ho),
-                            list = TRUE)
-
-## split data into training & hold-out
-holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
-holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
-sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
-sampClass    <- trainClass.df[  samp.idx$Resample1, ]
-
-##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
 num.cv      <- 10
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
-## define the fit parameters
+##------------------------------------------------------------------
+## define the fit control parameters
+##------------------------------------------------------------------
 fitControl <- trainControl(
                     method="cv",
                     number=num.cv,
@@ -94,40 +74,60 @@ fitControl <- trainControl(
                     savePredictions=FALSE)
 
 ##------------------------------------------------------------------
-## for sweeps create a parameter grid and then step through each one,
-## saving interim results so it doesn;t crap out on you and you can
-## monitor progress
+## for full fits use the best model from the sweeps
 ##------------------------------------------------------------------
-## [1] Search a small space around the maximum
-## rfGrid  <- expand.grid(.mtry=c(10,15,20))
-## [1] expand the search
-rfGrid  <- expand.grid(.mtry=seq(5,15,2))
+rfGrid  <- expand.grid(.mtry=c(7))
 nGrid   <- dim(rfGrid)[1]
 
 ##------------------------------------------------------------------
-## perform the fit
+## perform the fit; to avoid biases fit the model k times and then
+## at some point combine the k versions to create the predicted
+## outcome (because the true peak may be noisy)
 ##------------------------------------------------------------------
-for (i in 1:nGrid) {
-    
+
+## set a seed
+set.seed(4321)
+
+## number of iterations to make
+numFolds <- 10
+
+## loop over the iterations and do a full fit
+for (i in 1:numFolds) {
+   
     ## define a filename
-    tmp.filename <- paste("rf_sweep_mtry",rfGrid[i,1],".Rdata",sep="")
+    tmp.filename <- paste("rf_full_mtry",rfGrid[1],"_fold",i,"_V01.Rdata",sep="")
+   
+    ## define a partition index using the full dataset
+    samp.idx    <- createDataPartition(
+                                        y=trainClass.df[,c("label")],
+                                        times=1,
+                                        p = (1-(1/numFolds)),
+                                        list = TRUE)
     
-    ## perform the fit
-    tmp.fit      <- try(train(   x=sampDescr[,-1],
-                                 y=sampClass[,c("label")],
-                                 method="rf",
-                                 trControl=fitControl,
-                                 verbose=TRUE,
-                                 tuneGrid=data.frame(.mtry=rfGrid[i,])))
+    ## split the full dataset into training & hold-out
+    holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
+    holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
+    sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
+    sampClass    <- trainClass.df[  samp.idx$Resample1, ]
+    
+    ## perform the fit using the training data
+    tmp.fit      <- try(train( x=sampDescr[,-1],
+                               y=sampClass[,c("label")],
+                               method="rf",
+                               trControl=fitControl,
+                               verbose=TRUE,
+                               tuneGrid=data.frame(.mtry=rfGrid[1])
+                               ))
    
-   ## score the hold-out sample & compute the AMS curve
-   tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
-   tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
-   tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
-   tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
-   
-   ## save the results
-   save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+    ## score the hold-out sample & compute the AMS curve
+    tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
+    tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
+    tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
+    tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+
+    ## save the results
+    save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+
 }
 
 
