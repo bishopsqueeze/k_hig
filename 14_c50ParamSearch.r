@@ -62,15 +62,6 @@ trainDescr.df   <- as.data.frame(trainDescr)
 ## Use a subset of the available data for the parameter search phase
 ##------------------------------------------------------------------
 
-
-#
-# $
-#   $
-#       $ change back to 0.80 for tests
-#
-#
-#
-
 ## define the fraction to use as a hold-out sample
 p_ho    <- 0.80     ## use large fraction for sweeps
 
@@ -107,70 +98,35 @@ fitControl <- trainControl(
 ## saving interim results so it doesn;t crap out on you and you can
 ## monitor progress
 ##------------------------------------------------------------------
-
-## [1] First pass (incomplete) to search this grid
-##adaGrid  <- expand.grid(.maxdepth = c(1,3,5), .iter = c(150,200,250,300), .nu = c(0.1,0.3,0.5) )
-## [2] Depth test #1
-##adaGrid  <- expand.grid(.maxdepth = c(1,5,10,20,30), .iter = c(150), .nu = c(1) )
-## [3] Depth test #2
-adaGrid  <- expand.grid(.maxdepth = c(5,7,9,11,13), .iter = c(150), .nu = c(0.1) )
-nGrid   <- dim(adaGrid)[1]
+## [1] Try tune length
+c50Grid <- expand.grid(.trials=c(10), .model="rules", .winnow=FALSE)
 
 ##------------------------------------------------------------------
 ## perform the fit
 ##------------------------------------------------------------------
+nGrid <- dim(c50Grid)[1]
 for (i in 1:nGrid) {
     
     ## define a filename
-    tmp.filename <- paste("ada_sweep_depth",adaGrid[i,1],"_iter",adaGrid[i,2],"_nu",gsub("\\.","",as.character(adaGrid[i,3])),".Rdata",sep="")
+    tmp.filename <- paste("c50_sweep_trials",c50Grid[i,1],"_modelRules_winnowFalse",".Rdata",sep="")
     
     ## perform the fit
     tmp.fit      <- try(train(   x=sampDescr[,-1],
-                                y=sampClass[,c("label")],
-                                method="ada",
-                                trControl=fitControl,
-                                tuneGrid=data.frame(.maxdepth=adaGrid[i,1], .iter=adaGrid[i,2], .nu=adaGrid[i,3]),
-                                type="discrete",
-                                loss="exponential"
-                                ))
-    
-    ## score the hold-out sample & compute the AMS curve
-    tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
-    tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
-    tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
-    tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
-    
-    ## save the results
-    save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+                                 y=sampClass[,c("label")],
+                                 method="C5.0",
+                                 trControl=fitControl,
+                                 verbose=TRUE,
+                                 tuneGrid=data.frame(.trials=c50Grid[i,1], .model=c50Grid[i,2], .winnow=c50Grid[i,3])))
+   
+   ## score the hold-out sample & compute the AMS curve
+   tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
+   tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
+   tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
+   tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+   
+   ## save the results
+   save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
 }
-
-
-
-
-###----- DEBUG
-
-##------------------------------------------------------------------
-## set-up the fit parameters using the pre-selected (stratified) samples
-##------------------------------------------------------------------
-#num.cv      <- 3
-#num.repeat  <- 1
-#num.total   <- num.cv * num.repeat
-
-## define the fit parameters
-#fitControl <- trainControl(
-#method="cv",
-#number=num.cv,
-#verboseIter=TRUE,
-#savePredictions=FALSE)
-
-## perform the fit
-#tmp.fit      <- try(train(   x=sampDescr[,-1],
-#y=sampClass[,c("label")],
-#method="ada",
-#trControl=fitControl,
-#verbose=TRUE,
-#tuneLength=4,
-#))
 
 
 
