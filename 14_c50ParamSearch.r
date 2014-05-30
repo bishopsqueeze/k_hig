@@ -98,8 +98,8 @@ fitControl <- trainControl(
 ## saving interim results so it doesn;t crap out on you and you can
 ## monitor progress
 ##------------------------------------------------------------------
-## [1] Try tune length
-c50Grid <- expand.grid(.trials=c(10), .model="rules", .winnow=FALSE)
+## [1] Try model=rules, winnow=FALSE, and a range of trials based on the initial sweep
+c50Grid <- expand.grid(.trials=c(100,200,300,400,500,750,1000), .model="rules", .winnow=FALSE)
 
 ##------------------------------------------------------------------
 ## perform the fit
