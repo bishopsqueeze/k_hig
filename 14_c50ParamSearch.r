@@ -63,7 +63,7 @@ trainDescr.df   <- as.data.frame(trainDescr)
 ##------------------------------------------------------------------
 
 ## define the fraction to use as a hold-out sample
-p_ho    <- 0.80     ## use large fraction for sweeps
+p_ho    <- 0.50     ## use large fraction for sweeps
 
 ## define a partition index
 set.seed(88888888)
@@ -82,7 +82,7 @@ sampClass    <- trainClass.df[  samp.idx$Resample1, ]
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 10
+num.cv      <- 5
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
