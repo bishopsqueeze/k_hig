@@ -55,11 +55,9 @@ if (testFile == c("04_HiggsTestExRbcLcNumNa.Rdata")) {
 ##******************************************************************
 
 ## Version 1
-setwd("/Users/alexstephens/Development/kaggle/higgs/data/proc/gbm_full_depth9_trees450_shrink0.05_V01")
-
-setwd("/Users/alexstephens/Development/kaggle/higgs/data/proc/gbm_full_depth9_trees450_shrink0.05_V03")
-
-setwd("/Users/alexstephens/Development/kaggle/higgs/data/proc/gbm_full_depth9_trees450_shrink0.05_V04")
+v01.dir <- "/Users/alexstephens/Development/kaggle/higgs/data/proc/gbm_full_depth9_trees450_shrink0.05_V01"
+v03.dir <- "/Users/alexstephens/Development/kaggle/higgs/data/proc/gbm_full_depth9_trees450_shrink0.05_V03"
+v04.dir <- "/Users/alexstephens/Development/kaggle/higgs/data/proc/gbm_full_depth9_trees450_shrink0.05_V04"
 
 
 

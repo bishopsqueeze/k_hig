@@ -184,7 +184,7 @@ save(test.ex.rbc.lc, file="04_HiggsTestExRbcLc.Rdata")
 
 ## Train -> Case 4
 #save(train.eval, train.ex.rbc.lc.cor, file="04_HiggsTrainExRbcLcCorr.Rdata")
-save(est.ex.rbc.lc.cor, file="04_HiggsTestExRbcLcCorr.Rdata")
+save(test.ex.rbc.lc.cor, file="04_HiggsTestExRbcLcCorr.Rdata")
 
 ## Train -> Case 5
 #save(train.eval, train.ex.rbc.lc.numna, file="04_HiggsTrainExRbcLcNumNa.Rdata")
