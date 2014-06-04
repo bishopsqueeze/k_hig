@@ -91,7 +91,6 @@ num.total   <- num.cv * num.repeat
 fitControl <- trainControl(
                     method="cv",
                     number=num.cv,
-                    verboseIter=TRUE,
                     savePredictions=FALSE)
 
 ##------------------------------------------------------------------

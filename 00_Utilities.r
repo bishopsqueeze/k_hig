@@ -66,3 +66,28 @@ calcAmsCutoff <- function(mycutoff, myscore, y, w)
 
 
 
+##------------------------------------------------------------------
+## <function> :: amsSummary
+##------------------------------------------------------------------
+amsSummary  <- function (data, lev = NULL, model = NULL)
+{
+    cat("Data=", data, "\n")
+    wfac    <- 250000/nrow(data)
+    
+    nb      <- sum(data[, "obs"]== "b")
+    ns      <- sum(data[, "obs"]== "s")
+    ws      <- rep(692/nrow(data), nrow(data))
+    wb      <- rep(411000/nrow(data), nrow(data))
+    
+    cat("Num s =", ns, "Num =", nb, "\n")
+    
+    s       <- wfac*(ws %*% ((data[, "obs"]=="s")*(data[, "pred"]=="s")))
+    b       <- wfac*(wb %*% ((data[, "obs"]=="b")*(data[, "pred"]=="s")))
+    ams     <- sqrt(2*((s+b+10)*log(1+s/(b+10))-s))
+    
+    out <- c(ams)
+    names(out) <- c("AMS")
+    out
+}
+
+

@@ -9,7 +9,6 @@ library(data.table)
 library(caret)
 library(foreach)
 library(doMC)
-library(pROC)
 
 ##------------------------------------------------------------------
 ## register cores
@@ -48,100 +47,104 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
     trainClass  <- train.eval
 }
 
-
 ##******************************************************************
 ## Main
 ##******************************************************************
 
 ##------------------------------------------------------------------
+## In this iteration, we will do the following:
+##  1. First, we create a hold-out sample to be used across
+##     all folds
+##  1. Use 10-fold cross validation on the remaining dataset
+##  2. Score each hold-out fold
+##
+## Since we are manually doing the folds, fit all datapoints
+##------------------------------------------------------------------
+
+##------------------------------------------------------------------
 ## Transform data to data.frame for the fitting procedure
 ##------------------------------------------------------------------
-trainClass.df   <- as.data.frame(trainClass)[1:10000, ]       ## test on a small sample
-trainDescr.df   <- as.data.frame(trainDescr)[1:10000, ]       ## test on a small sample
-
-
-
-##------------------------------------------------------------------
-## Use a subset of the available data for the parameter search phase
-##------------------------------------------------------------------
-
-## define the fraction to use as a hold-out sample
-p_ho    <- 0.20     ## use large fraction for sweeps
-
-## define a partition index
-set.seed(88888888)
-samp.idx    <- createDataPartition(
-                            y=trainClass.df[,c("label")],
-                            times=1,
-                            p = (1-p_ho),
-                            list = TRUE)
-
-## split data into training & hold-out
-holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
-holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
-sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
-sampClass    <- trainClass.df[  samp.idx$Resample1, ]
-
-
+trainClass   <- as.data.frame(trainClass)
+trainDescr   <- as.data.frame(trainDescr)
 
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 10
+num.cv      <- 5
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
-## define the fit parameters
+##------------------------------------------------------------------
+## define the fit control parameters
+##------------------------------------------------------------------
 fitControl <- trainControl(
                     method="cv",
                     number=num.cv,
-#verboseIter=TRUE,
-classProbs=TRUE,
-summaryFunction = twoClassSummary,
-#summaryFunction = amsSummary,
                     savePredictions=FALSE)
 
 ##------------------------------------------------------------------
-## for sweeps create a parameter grid and then step through each one,
-## saving interim results so it doesn;t crap out on you and you can
-## monitor progress
+## for full fits use the best model from the sweeps
 ##------------------------------------------------------------------
-## [1] Search a small space around the maximum
-## rfGrid  <- expand.grid(.mtry=c(10,15,20))
-## [2] expand the search
-## rfGrid  <- expand.grid(.mtry=seq(5,15,2))
-## nGrid   <- dim(rfGrid)[1]
-## [3] Try with the two class summary function
 rfGrid  <- expand.grid(.mtry=c(7))
-nGrid   <- 1
+nGrid   <- dim(rfGrid)[1]
 
 ##------------------------------------------------------------------
-## perform the fit
+## Create the hold out data
 ##------------------------------------------------------------------
-for (i in 1:nGrid) {
-    
-    ## define a filename
-    # tmp.filename <- paste("rf_sweep_mtry",rfGrid[i,1],".Rdata",sep="")
-    
-    ## perform the fit
-    tmp.fit      <- try(train(   x=sampDescr[,-1],
-                                 y=sampClass[,c("label")],
-                                 #weights = sampClass$weight,
-                                 method="rf",
-                                 trControl=fitControl,
-                                 #verbose=TRUE,
-                                 #metric = "AMS",
-                                 metric = "ROC",
-                                 tuneGrid=data.frame(.mtry=rfGrid[i,])))
+
+## hold-out percentage
+ho.pct      <- 0.05
+
+## define a partition index using the full dataset
+set.seed(888888)
+samp.idx    <- createDataPartition(
+                    y=trainClass[,c("label")],
+                    times=1,
+                    p = (1-ho.pct),
+                    list = TRUE)
+
+## split the full dataset into HOLD-OUT (ho) and TRAIN/TEST (tt)
+hoDescr     <- trainDescr[ -samp.idx$Resample1, ]
+hoClass     <- trainClass[ -samp.idx$Resample1, ]
+ttDescr     <- trainDescr[  samp.idx$Resample1, ]
+ttClass     <- trainClass[  samp.idx$Resample1, ]
+
+##------------------------------------------------------------------
+## define the number of "iterations"
+##------------------------------------------------------------------
+num.iter   <- 10
+
+##------------------------------------------------------------------
+## create a set of folds using the remaining TRAIN/TEST data
+##------------------------------------------------------------------
+##fold.idx    <- createFolds(ttClass$label, k=num.folds, list=TRUE, returnTrain=FALSE)
+##do.call("rbind",lapply(fold.idx, function(x){prop.table(table(trainClass[x,"label"]))}))
+
+##------------------------------------------------------------------
+## loop over each iteration and do a fit
+##------------------------------------------------------------------
+for (i in 1:num.iter) {
    
-   ## score the hold-out sample & compute the AMS curve
-   tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
-   tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
-   tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
-   tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+    ## define a filename
+    tmp.filename <- paste("rf_full_mtry",rfGrid[1],"_fold",i,"_V03.Rdata",sep="")
+    cat("Working on ... ", tmp.filename, "\n")
+    
+    ## perform the fit using the training data
+    tmp.fit      <- try(train( x=ttDescr[,-1],
+                               y=ttClass[,c("label")],
+                               method="rf",
+                               trControl=fitControl,
+                               tuneGrid=data.frame(.mtry=rfGrid[1])
+                               ))
+   
+   hold.score      <- predict(tmp.fit, newdata=hoDescr[,-1], type="prob")[,c("s")]
+   hold.pred       <- predict(tmp.fit, newdata=hoDescr[,-1])
+   hold.breaks     <- quantile(hold.score, probs=seq(0,1,0.01))
+   hold.ams        <- sapply(hold.breaks, calcAmsCutoff, hold.score, hoClass[,"label"], hoClass[,"weight"])
    
    ## save the results
-   #save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+   save(tmp.fit, samp.idx, hold.score, hold.ams, file=tmp.filename)
+
 }
 
 
