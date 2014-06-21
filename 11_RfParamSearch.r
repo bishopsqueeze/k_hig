@@ -56,8 +56,8 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
 ##------------------------------------------------------------------
 ## Transform data to data.frame for the fitting procedure
 ##------------------------------------------------------------------
-trainClass.df   <- as.data.frame(trainClass)[1:10000, ]       ## test on a small sample
-trainDescr.df   <- as.data.frame(trainDescr)[1:10000, ]       ## test on a small sample
+trainClass.df   <- as.data.frame(trainClass)       ## test on a small sample
+trainDescr.df   <- as.data.frame(trainDescr)       ## test on a small sample
 
 
 
@@ -66,7 +66,7 @@ trainDescr.df   <- as.data.frame(trainDescr)[1:10000, ]       ## test on a small
 ##------------------------------------------------------------------
 
 ## define the fraction to use as a hold-out sample
-p_ho    <- 0.20     ## use large fraction for sweeps
+p_ho    <- 0.10     ## use large fraction for sweeps
 
 ## define a partition index
 set.seed(88888888)
@@ -99,7 +99,7 @@ fitControl <- trainControl(
 classProbs=TRUE,
 summaryFunction = twoClassSummary,
 #summaryFunction = amsSummary,
-                    savePredictions=FALSE)
+                    savePredictions=TRUE)
 
 ##------------------------------------------------------------------
 ## for sweeps create a parameter grid and then step through each one,
@@ -112,8 +112,10 @@ summaryFunction = twoClassSummary,
 ## rfGrid  <- expand.grid(.mtry=seq(5,15,2))
 ## nGrid   <- dim(rfGrid)[1]
 ## [3] Try with the two class summary function
-rfGrid  <- expand.grid(.mtry=c(7))
-nGrid   <- 1
+#rfGrid  <- expand.grid(.mtry=seq(5,15,2))
+#nGrid   <- dim(rfGrid)[1]
+## [4] Try a tune length of 25
+nGrid <- 1
 
 ##------------------------------------------------------------------
 ## perform the fit
@@ -121,7 +123,7 @@ nGrid   <- 1
 for (i in 1:nGrid) {
     
     ## define a filename
-    # tmp.filename <- paste("rf_sweep_mtry",rfGrid[i,1],".Rdata",sep="")
+    tmp.filename <- paste("rf_sweep_ROC_mtry_tuneLength10_",rfGrid[i,1],".Rdata",sep="")
     
     ## perform the fit
     tmp.fit      <- try(train(   x=sampDescr[,-1],
@@ -132,7 +134,9 @@ for (i in 1:nGrid) {
                                  #verbose=TRUE,
                                  #metric = "AMS",
                                  metric = "ROC",
-                                 tuneGrid=data.frame(.mtry=rfGrid[i,])))
+                                 tuneLength=10
+                                 #tuneGrid=data.frame(.mtry=rfGrid[i,])
+                                 ))
    
    ## score the hold-out sample & compute the AMS curve
    tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
@@ -141,7 +145,7 @@ for (i in 1:nGrid) {
    tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
    
    ## save the results
-   #save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+   save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
 }
 
 

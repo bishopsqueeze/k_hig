@@ -9,7 +9,6 @@ library(data.table)
 library(caret)
 library(foreach)
 library(doMC)
-library(pROC)
 
 ##------------------------------------------------------------------
 ## register cores
@@ -56,17 +55,24 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
 ##------------------------------------------------------------------
 ## Transform data to data.frame for the fitting procedure
 ##------------------------------------------------------------------
-trainClass.df   <- as.data.frame(trainClass)       ## test on a small sample
-trainDescr.df   <- as.data.frame(trainDescr)       ## test on a small sample
-
-
+trainClass.df   <- as.data.frame(trainClass)
+trainDescr.df   <- as.data.frame(trainDescr)
 
 ##------------------------------------------------------------------
 ## Use a subset of the available data for the parameter search phase
 ##------------------------------------------------------------------
 
+
+#
+# $
+#   $
+#       $ change back to 0.80 for tests
+#
+#
+#
+
 ## define the fraction to use as a hold-out sample
-p_ho    <- 0.90     ## use large fraction for sweeps
+p_ho    <- 0.80     ## use large fraction for sweeps
 
 ## define a partition index
 set.seed(88888888)
@@ -82,12 +88,10 @@ holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
 sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
 sampClass    <- trainClass.df[  samp.idx$Resample1, ]
 
-
-
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 3
+num.cv      <- 10
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
@@ -95,27 +99,22 @@ num.total   <- num.cv * num.repeat
 fitControl <- trainControl(
                     method="cv",
                     number=num.cv,
-#verboseIter=TRUE,
-classProbs=TRUE,
-summaryFunction = twoClassSummary,
-#summaryFunction = amsSummary,
-                    savePredictions=TRUE)
+                    verboseIter=TRUE,
+                    savePredictions=FALSE)
 
 ##------------------------------------------------------------------
 ## for sweeps create a parameter grid and then step through each one,
 ## saving interim results so it doesn;t crap out on you and you can
 ## monitor progress
 ##------------------------------------------------------------------
-## [1] Search a small space around the maximum
-## rfGrid  <- expand.grid(.mtry=c(10,15,20))
-## [2] expand the search
-## rfGrid  <- expand.grid(.mtry=seq(5,15,2))
-## nGrid   <- dim(rfGrid)[1]
-## [3] Try with the two class summary function
-#rfGrid  <- expand.grid(.mtry=seq(5,15,2))
-#nGrid   <- dim(rfGrid)[1]
-## [4] Try a tune length of 25
-nGrid <- 1
+
+## [1] First pass (incomplete) to search this grid
+##adaGrid  <- expand.grid(.maxdepth = c(1,3,5), .iter = c(150,200,250,300), .nu = c(0.1,0.3,0.5) )
+## [2] Depth test #1
+##adaGrid  <- expand.grid(.maxdepth = c(1,5,10,20,30), .iter = c(150), .nu = c(1) )
+## [3] Depth test #2
+adaGrid  <- expand.grid(.maxdepth = c(5,7,9,11,13), .iter = c(150), .nu = c(0.1) )
+nGrid   <- dim(adaGrid)[1]
 
 ##------------------------------------------------------------------
 ## perform the fit
@@ -123,30 +122,55 @@ nGrid <- 1
 for (i in 1:nGrid) {
     
     ## define a filename
-    tmp.filename <- paste("Ada_sweep_ROC_tuneLength10_.Rdata",sep="")
+    tmp.filename <- paste("ada_sweep_depth",adaGrid[i,1],"_iter",adaGrid[i,2],"_nu",gsub("\\.","",as.character(adaGrid[i,3])),".Rdata",sep="")
     
     ## perform the fit
     tmp.fit      <- try(train(   x=sampDescr[,-1],
-                                 y=sampClass[,c("label")],
-                                 #weights = sampClass$weight,
-                                 method="ada",
-                                 trControl=fitControl,
-                                 #verbose=TRUE,
-                                 #metric = "AMS",
-                                 metric = "ROC",
-                                 tuneLength=3
-                                 #tuneGrid=data.frame(.mtry=rfGrid[i,])
-                                 ))
-   
-   ## score the hold-out sample & compute the AMS curve
-   tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
-   tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
-   tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
-   tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
-   
-   ## save the results
-   save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+                                y=sampClass[,c("label")],
+                                method="ada",
+                                trControl=fitControl,
+                                tuneGrid=data.frame(.maxdepth=adaGrid[i,1], .iter=adaGrid[i,2], .nu=adaGrid[i,3]),
+                                type="discrete",
+                                loss="exponential"
+                                ))
+    
+    ## score the hold-out sample & compute the AMS curve
+    tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
+    tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
+    tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
+    tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+    
+    ## save the results
+    save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
 }
+
+
+
+
+###----- DEBUG
+
+##------------------------------------------------------------------
+## set-up the fit parameters using the pre-selected (stratified) samples
+##------------------------------------------------------------------
+#num.cv      <- 3
+#num.repeat  <- 1
+#num.total   <- num.cv * num.repeat
+
+## define the fit parameters
+#fitControl <- trainControl(
+#method="cv",
+#number=num.cv,
+#verboseIter=TRUE,
+#savePredictions=FALSE)
+
+## perform the fit
+#tmp.fit      <- try(train(   x=sampDescr[,-1],
+#y=sampClass[,c("label")],
+#method="ada",
+#trControl=fitControl,
+#verbose=TRUE,
+#tuneLength=4,
+#))
 
 
 

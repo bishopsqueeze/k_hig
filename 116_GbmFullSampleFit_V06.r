@@ -33,7 +33,7 @@ source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 ##------------------------------------------------------------------
 ## Load the training data
 ##------------------------------------------------------------------
-loadfile <- "04_HiggsTrainExRbcLcNumNa.Rdata"
+loadfile <- "04_HiggsTrainAll.Rdata"
 load(loadfile)
 
 if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
@@ -44,6 +44,9 @@ if (loadfile == c("04_HiggsTrainExRbcLc.Rdata")) {
     trainClass  <- train.eval
 } else if (loadfile == c("04_HiggsTrainExRbcLcNumNa.Rdata")) {
     trainDescr  <- train.ex.rbc.lc.numna
+    trainClass  <- train.eval
+} else if (loadfile == c("04_HiggsTrainAll.Rdata")) {
+    trainDescr  <- train.all
     trainClass  <- train.eval
 }
 
@@ -70,8 +73,8 @@ trainClass  <- as.data.frame(trainClass)
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 10
-num.repeat  <- 3
+num.cv      <- 5
+num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
 ##------------------------------------------------------------------
@@ -81,13 +84,12 @@ fitControl <- trainControl(
                         method="cv",
                         number=num.cv,
                         repeats=num.repeat,
-                        verboseIter=TRUE,
                         savePredictions=FALSE)
 
 ##------------------------------------------------------------------
 ## for full fits use the best model from the sweeps
 ##------------------------------------------------------------------
-gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(450), .shrinkage=c(0.05))
+gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(3000), .shrinkage=c(0.025))
 nGrid   <- dim(gbmGrid)[1]
 
 ##------------------------------------------------------------------
@@ -98,7 +100,7 @@ nGrid   <- dim(gbmGrid)[1]
 ho.pct      <- 0.10
 
 ## define a partition index using the full dataset
-set.seed(4321)
+set.seed(1234)
 samp.idx    <- createDataPartition(
                             y=trainClass[,c("label")],
                             times=1,
@@ -115,31 +117,25 @@ ttClass     <- trainClass[  samp.idx$Resample1, ]
 ## define the number of "iterations"
 ##------------------------------------------------------------------
 num.iter   <- 10
-see
-##------------------------------------------------------------------
-## create a set of folds using the remaining TRAIN/TEST data
-##------------------------------------------------------------------
-##fold.idx    <- createFolds(ttClass$label, k=num.folds, list=TRUE, returnTrain=FALSE)
-##do.call("rbind",lapply(fold.idx, function(x){prop.table(table(trainClass[x,"label"]))}))
+seed.vec   <- sample.int(1000000,num.iter,replace=FALSE)
 
 ##------------------------------------------------------------------
 ## loop over each fold and do a fit
 ##------------------------------------------------------------------
-for (i in 2:num.iter) {
+for (i in 1:num.iter) {
 
     ## define an output filename
-    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_fold",i,"_V03.Rdata",sep="")
+    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_iter",i,"_V06.Rdata",sep="")
 
     ## load the fold index
     ##tmp.idx      <- fold.idx[[i]]
     
-    
     ## perform the fit using the training data
+    set.seed(seed.vec[i])
     tmp.fit      <- try(train(  x=ttDescr[,-1],
                                 y=ttClass[,c("label")],
                                 method="gbm",
                                 trControl=fitControl,
-                                verbose=TRUE,
                                 tuneGrid=data.frame(.interaction.depth=gbmGrid[1,1], .n.trees=gbmGrid[1,2], .shrinkage=gbmGrid[1,3])
                                 ))
 
@@ -149,9 +145,10 @@ for (i in 2:num.iter) {
     hold.ams        <- sapply(hold.breaks, calcAmsCutoff, hold.score, hoClass[,"label"], hoClass[,"weight"])
 
     ## save the results
-    save(tmp.fit, samp.idx, hold.score, hold.ams, file=tmp.filename)
+    save(tmp.fit, samp.idx, hold.score, hold.ams, seed.vec, file=tmp.filename)
 
 }
+
 
 
 

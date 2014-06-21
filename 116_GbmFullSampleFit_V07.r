@@ -33,15 +33,14 @@ source("/Users/alexstephens/Development/kaggle/higgs/k_hig/00_Utilities.r")
 ##------------------------------------------------------------------
 ## Load the training data
 ##------------------------------------------------------------------
-loadfile <- "04_HiggsTrainAll.Rdata"
+loadfile <- "02_HiggsPreProcTrain.Rdata"
 load(loadfile)
 
-if (loadfile == c("04_HiggsTrainAll.Rdata"))
+if (loadfile == c("02_HiggsPreProcTrain.Rdata"))
 {
-    trainDescr  <- train.all
-    trainClass  <- train.eval
+    trainDescr.dt  <- train.pp
+    trainClass.dt  <- train.eval
 }
-
 
 ##******************************************************************
 ## constants
@@ -54,75 +53,80 @@ na_val  <- -999
 n_trees <- 500
 
 ##******************************************************************
-## functions
-##******************************************************************
-
-
-##******************************************************************
 ## Main
 ##******************************************************************
 
 ##------------------------------------------------------------------
-## Transform data to data.frame for the fitting procedure
+## In this iteration, we will do the following:
+##  1. First, we create a hold-out sample to be used across
+##     all folds
+##  1. Use 10-fold cross validation on the remaining dataset
+##  2. Score each hold-out fold
+##
+## Since we are manually doing the folds, fit all datapoints
 ##------------------------------------------------------------------
-trainClass.df   <- as.data.frame(trainClass)
-trainDescr.df   <- as.data.frame(trainDescr)
+
+##------------------------------------------------------------------
+## use common naming for the train data.frame
+##------------------------------------------------------------------
+trainDescr  <- as.data.frame(trainDescr.dt)
+trainClass  <- as.data.frame(trainClass.dt)
 
 ##------------------------------------------------------------------
 ## Create a numeric label
 ##------------------------------------------------------------------
-trainClass.df$label.num <- as.numeric(ifelse(trainClass.df$label=="s",s_val,b_val))
+trainClass$label.num <- as.numeric(ifelse(trainClass$label=="s", s_val, b_val))
 
 ##------------------------------------------------------------------
 ## Compute the sum of signal and background weights
 ##------------------------------------------------------------------
-s_total <- sum(trainClass.df$weight[trainClass.df$label.num == s_val])
-b_total <- sum(trainClass.df$weight[trainClass.df$label.num == b_val])
+s_total <- sum(trainClass$weight[trainClass$label.num == s_val])
+b_total <- sum(trainClass$weight[trainClass$label.num == b_val])
 
 ## compute max_AMS
-max_AMS <- AMS(trainClass.df$label.num,trainClass.df$label.num,trainClass.df$weight)
+max_AMS <- AMS(trainClass$label.num, trainClass$label.num, trainClass$weight)
 
 ##------------------------------------------------------------------
-## Replace NA
+## Replace NAs (already done in the preprocessing steps)
 ##------------------------------------------------------------------
-trainDescr.df[trainDescr.df==na_val] <- NA
+#trainDescr[trainDescr==na_val] <- NA
 
 ##------------------------------------------------------------------
-## Use a subset of the available data for the parameter search phase
+## Create the hold out data
 ##------------------------------------------------------------------
 
-## define the fraction to use as a hold-out sample
-p_ho    <- 0.10     ## use large fraction for sweeps
+## hold-out percentage
+ho.pct      <- 0.10
 
-## define a partition index
-set.seed(7777777)
+## define a partition index using the full dataset
+set.seed(1234)
 samp.idx    <- createDataPartition(
-                            y=trainClass.df[,c("label")],
+                            y=trainClass[,c("label")],
                             times=1,
-                            p = (1-p_ho),
+                            p = (1-ho.pct),
                             list = TRUE)
 
-## split data into training & hold-out
-holdDescr    <- trainDescr.df[ -samp.idx$Resample1, ]
-holdClass    <- trainClass.df[ -samp.idx$Resample1, ]
-sampDescr    <- trainDescr.df[  samp.idx$Resample1, ]
-sampClass    <- trainClass.df[  samp.idx$Resample1, ]
+## split the full dataset into HOLD-OUT (ho) and TRAIN/TEST (tt)
+hoDescr     <- trainDescr[ -samp.idx$Resample1, ]
+hoClass     <- trainClass[ -samp.idx$Resample1, ]
+ttDescr     <- trainDescr[  samp.idx$Resample1, ]
+ttClass     <- trainClass[  samp.idx$Resample1, ]
 
 
 ##------------------------------------------------------------------
 ## Renormalize weights
 ##------------------------------------------------------------------
-sampClass$weight <- normalize(sampClass$weight,sampClass$label.num,s_total,b_total)
-holdClass$weight <- normalize(holdClass$weight,holdClass$label.num,s_total,b_total)
+ttClass$weight <- normalize(ttClass$weight,ttClass$label.num,s_total,b_total)
+hoClass$weight <- normalize(hoClass$weight,hoClass$label.num,s_total,b_total)
 
 ## confirm normalization
-AMS(sampClass$label.num,sampClass$label.num,sampClass$weight)
-AMS(holdClass$label.num,holdClass$label.num,holdClass$weight)
+AMS(ttClass$label.num,ttClass$label.num,ttClass$weight)
+AMS(hoClass$label.num,hoClass$label.num,hoClass$weight)
 
-s_train <- sum(sampClass$weight[sampClass$label.num==s_val])
-b_train <- sum(sampClass$weight[sampClass$label.num==b_val])
+s_train <- sum(ttClass$weight[ttClass$label.num==s_val])
+b_train <- sum(ttClass$weight[ttClass$label.num==b_val])
 
-w = ifelse(sampClass$label.num==s_val, sampClass$weight/s_train, sampClass$weight/b_train)
+w = ifelse(ttClass$label.num==s_val, ttClass$weight/s_train, ttClass$weight/b_train)
 
 
 ##------------------------------------------------------------------
@@ -132,61 +136,61 @@ num.cv      <- 5
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
-## define the fit parameters
+##------------------------------------------------------------------
+## define the fit control parameters
+##------------------------------------------------------------------
 fitControl <- trainControl(
                     method="cv",
                     number=num.cv,
+                    repeats=num.repeat,
                     savePredictions=FALSE)
 
 ##------------------------------------------------------------------
-## for sweeps create a parameter grid and then step through each one,
-## saving interim results so it doesn;t crap out on you and you can
-## monitor progress
+## for full fits use the best model from the sweeps
 ##------------------------------------------------------------------
-
-## [1] Tested after identifying 9/450 via an early sweep
-## gbmGrid <- expand.grid(.interaction.depth=9, .n.trees=c(450), .shrinkage=c(.01,.05,.1,.2))
-## [2] Tested after 0.05 yielded the best accuracy/ams
-## gbmGrid <- expand.grid(.interaction.depth=c(9,10), .n.trees=c(400,450,500), .shrinkage=c(.05))
-## [3] Tested after 0.05/450/9 yielded the best accuracy/ams
-gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(500,1000,2000), .shrinkage=c(0.05))
+gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(500), .shrinkage=c(0.05))
+nGrid   <- dim(gbmGrid)[1]
 
 
 ##------------------------------------------------------------------
-## perform the fit #### CHANGE LOOP BACK TO 1 ###
+## define the number of "iterations"
 ##------------------------------------------------------------------
-nGrid <- dim(gbmGrid)[1]
-for (i in 1:nGrid) {
+num.iter   <- 10
+seed.vec   <- sample.int(1000000,num.iter,replace=FALSE)
+
+##------------------------------------------------------------------
+## loop over each fold and do a fit
+##------------------------------------------------------------------
+for (i in 2:num.iter) {
+
+    ## define an output filename
+    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_iter",i,"_V07.Rdata",sep="")
+
+    ## load the fold index
+    ##tmp.idx      <- fold.idx[[i]]
     
-    ## define a filename
-    tmp.filename <- paste("gbm_weighted_depth",gbmGrid[i,1],"_trees",gbmGrid[i,2],"_shrink",gsub("\\.","",as.character(gbmGrid[i,3])),".Rdata",sep="")
-    
-    ## perform the fit
-    tmp.fit      <- try(train(  x=sampDescr[,-1],
-                                y=sampClass[,c("label")],
+    ## perform the fit using the training data
+    set.seed(seed.vec[i])
+    tmp.fit      <- try(train(  x=ttDescr[,-1],
+                                y=ttClass[,c("label")],
                                 method="gbm",
                                 weights=w,
                                 trControl=fitControl,
-                                tuneGrid=data.frame(.interaction.depth=gbmGrid[i,1], .n.trees=gbmGrid[i,2], .shrinkage=gbmGrid[i,3]),
+                                tuneGrid=data.frame(.interaction.depth=gbmGrid[1,1], .n.trees=gbmGrid[1,2], .shrinkage=gbmGrid[1,3]),
                                 n.minobsinnode=1,
-                                bag.fraction=0.9,
+                                bag.fraction=0.9
                                 ))
 
-    ## score the hold-out sample & compute the AMS curve
-    tmp.score    <- predict(tmp.fit, newdata=holdDescr[,-1], type="prob")[,c("s")]
-    #tmp.pred     <- predict(tmp.fit, newdata=holdDescr[,-1])
-    #tmp.breaks   <- quantile(tmp.score, probs=seq(0,1,0.01))
-    #tmp.ams      <- sapply(tmp.breaks, calcAmsCutoff, tmp.score, holdClass$label, holdClass$weight)
+    hold.score   <- predict(tmp.fit, newdata=hoDescr[,-1], type="prob")[,c("s")]
+    test$scores  <- hold.score
     
-    test         <- holdClass
-    test$scores  <- tmp.score
-    
-    r = getAMS(test)
-    p = ifelse( test$scores >= r$threshold, s_val,b_val)
-    AMS(p,test$label.num,test$weight)
-    
+    hold.res     <- getAMS(test)
+    hold.pred    <- ifelse( test$scores >= hold.res$threshold, s_val,b_val)
+    AMS(hold.pred, test$label.num, test$weight)
+
     ## save the results
-    save(tmp.fit, samp.idx, tmp.score, tmp.ams, file=tmp.filename)
+    save(tmp.fit, samp.idx, hold.score, hold.res, hold.pred, seed.vec, file=tmp.filename)
+
 }
 
 

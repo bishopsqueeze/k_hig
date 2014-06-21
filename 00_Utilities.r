@@ -4,6 +4,70 @@
 ## Reference: http://www.kaggle.com/c/higgs-boson
 ##------------------------------------------------------------------
 
+
+
+##------------------------------------------------------------------
+## <function> :: normalize
+##------------------------------------------------------------------
+## normalize training data weights
+##------------------------------------------------------------------
+normalize <- function(weights, labels, s, b, n)
+{
+    s_norm = s/sum(weights[labels==s_val])
+    b_norm = b/sum(weights[labels==b_val])
+    return(ifelse(labels==s_val, s_norm*weights, b_norm*weights))
+}
+
+##------------------------------------------------------------------
+## <function> :: AMS
+##------------------------------------------------------------------
+## Compute the AMS score
+##------------------------------------------------------------------
+AMS <-function(pred,real,weight )
+{
+    pred_s_ind = which(pred==s_val)
+    real_s_ind = which(real==s_val)
+    real_b_ind = which(real==b_val)
+    s = sum(weight[intersect(pred_s_ind,real_s_ind)])
+    b = sum(weight[intersect(pred_s_ind,real_b_ind)])
+    
+    ans = sqrt(2*((s+b+b_tau)*log(1+s/(b+b_tau))-s))
+    return(ans)
+}
+
+##------------------------------------------------------------------
+## <function> :: trim
+##------------------------------------------------------------------
+## Remove leading/trailing whitespace from a character string
+##------------------------------------------------------------------
+getAMS <- function(test)
+{
+    test = test[order(test$scores),]
+    
+    s <- sum(test$weight[test$label.num==s_val])
+    b <- sum(test$weight[test$label.num==b_val])
+    
+    ams = rep(0,floor(.9*nrow(test)))
+    amsMax = 0
+    threshold = 0
+    for (i in 1:floor(.9*nrow(test))) {
+        s = max(0,s)
+        b = max(0,b)
+        ams[i] = sqrt(2*((s+b+b_tau)*log(1+s/(b+b_tau))-s))
+        if (ams[i] > amsMax) {
+            amsMax = ams[i]
+            threshold = test$scores[i]
+        }
+        if (test$label.num[i] == s_val)
+        s= s-test$weight[i]
+        else
+        b= b-test$weight[i]
+        
+    }
+    plot(ams,type="l")
+    return(data.frame(ams=amsMax,threshold=threshold))
+}
+
 ##------------------------------------------------------------------
 ## <function> :: trim
 ##------------------------------------------------------------------
@@ -71,13 +135,13 @@ calcAmsCutoff <- function(mycutoff, myscore, y, w)
 ##------------------------------------------------------------------
 amsSummary  <- function (data, lev = NULL, model = NULL)
 {
-    cat("Data=", data, "\n")
+    #cat("Data=", as.matrix(data), "\n")
     wfac    <- 250000/nrow(data)
     
     nb      <- sum(data[, "obs"]== "b")
     ns      <- sum(data[, "obs"]== "s")
-    ws      <- rep(692/nrow(data), nrow(data))
-    wb      <- rep(411000/nrow(data), nrow(data))
+    ws      <- rep(692/250000, nrow(data))
+    wb      <- rep(411000/250000, nrow(data))
     
     cat("Num s =", ns, "Num =", nb, "\n")
     
@@ -89,5 +153,4 @@ amsSummary  <- function (data, lev = NULL, model = NULL)
     names(out) <- c("AMS")
     out
 }
-
 

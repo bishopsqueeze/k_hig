@@ -87,7 +87,7 @@ sampClass    <- trainClass.df[  samp.idx$Resample1, ]
 ##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
-num.cv      <- 3
+num.cv      <- 10
 num.repeat  <- 1
 num.total   <- num.cv * num.repeat
 
@@ -123,18 +123,18 @@ nGrid <- 1
 for (i in 1:nGrid) {
     
     ## define a filename
-    tmp.filename <- paste("Ada_sweep_ROC_tuneLength10_.Rdata",sep="")
+    tmp.filename <- paste("LogitBoost_sweep_ROC_mtry_tuneLength10_.Rdata",sep="")
     
     ## perform the fit
     tmp.fit      <- try(train(   x=sampDescr[,-1],
                                  y=sampClass[,c("label")],
                                  #weights = sampClass$weight,
-                                 method="ada",
+                                 method="LogitBoost",
                                  trControl=fitControl,
                                  #verbose=TRUE,
                                  #metric = "AMS",
                                  metric = "ROC",
-                                 tuneLength=3
+                                 tuneLength=20
                                  #tuneGrid=data.frame(.mtry=rfGrid[i,])
                                  ))
    
