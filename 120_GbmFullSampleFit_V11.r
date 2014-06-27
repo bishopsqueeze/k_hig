@@ -13,7 +13,7 @@ library(doMC)
 ##------------------------------------------------------------------
 ## register cores
 ##------------------------------------------------------------------
-registerDoMC(4)
+registerDoMC(12)
 
 ##------------------------------------------------------------------
 ## Clear the workspace
@@ -147,15 +147,16 @@ fitControl <- trainControl(
 
 ##------------------------------------------------------------------
 ## for full fits use the best model from the sweeps
-##------------------------------------------------------------------
-gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(500), .shrinkage=c(0.05))
+##------------------------------------------------------------------3
+gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(500), .shrinkage=c(0.20))
 nGrid   <- dim(gbmGrid)[1]
 
 
 ##------------------------------------------------------------------
 ## define the number of "iterations"
 ##------------------------------------------------------------------
-num.iter   <- 20
+set.seed(43214321)
+num.iter   <- 50
 seed.vec   <- sample.int(1000000,num.iter,replace=FALSE)
 
 ##------------------------------------------------------------------
@@ -164,7 +165,7 @@ seed.vec   <- sample.int(1000000,num.iter,replace=FALSE)
 for (i in 1:num.iter) {
 
     ## define an output filename
-    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_iter",i,"_V07.Rdata",sep="")
+    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_iter",i,"_V11.Rdata",sep="")
 
     ## load the fold index
     ##tmp.idx      <- fold.idx[[i]]
@@ -178,15 +179,17 @@ for (i in 1:num.iter) {
                                 trControl=fitControl,
                                 tuneGrid=data.frame(.interaction.depth=gbmGrid[1,1], .n.trees=gbmGrid[1,2], .shrinkage=gbmGrid[1,3]),
                                 n.minobsinnode=1,
+                                distribution="adaboost",
                                 bag.fraction=0.9
                                 ))
 
-    hold.score   <- predict(tmp.fit, newdata=hoDescr[,-1], type="prob")[,c("s")]
-    test$scores  <- hold.score
+    hold.score      <- predict(tmp.fit, newdata=hoDescr[,-1], type="prob")[,c("s")]
+    hoClass$scores  <- hold.score
     
-    hold.res     <- getAMS(test)
-    hold.pred    <- ifelse(test$scores >= hold.res$threshold, s_val,b_val)
-    AMS(hold.pred, test$label.num, test$weight)
+    hold.res     <- getAMS(hoClass)
+    hold.pred    <- ifelse(hoClass$scores >= hold.res$threshold, s_val, b_val)
+    AMS(hold.pred, hoClass$label.num, hoClass$weight)
+    cat("Iteration = ", i ," AMS Ouput = ", as.numeric(hold.res$amsMax), "\n")
 
     ## save the results
     save(tmp.fit, samp.idx, hold.score, hold.res, hold.pred, seed.vec, file=tmp.filename)

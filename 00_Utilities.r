@@ -23,7 +23,7 @@ normalize <- function(weights, labels, s, b, n)
 ##------------------------------------------------------------------
 ## Compute the AMS score
 ##------------------------------------------------------------------
-AMS <-function(pred,real,weight )
+AMS <-function(pred,real,weight)
 {
     pred_s_ind = which(pred==s_val)
     real_s_ind = which(real==s_val)
@@ -40,7 +40,7 @@ AMS <-function(pred,real,weight )
 ##------------------------------------------------------------------
 ## Remove leading/trailing whitespace from a character string
 ##------------------------------------------------------------------
-getAMS <- function(test)
+getAMS <- function(test, doplot=FALSE)
 {
     test = test[order(test$scores),]
     
@@ -64,8 +64,11 @@ getAMS <- function(test)
         b= b-test$weight[i]
         
     }
-    plot(ams,type="l")
-    return(data.frame(ams=amsMax,threshold=threshold))
+    if (doplot) {
+        plot(ams,type="l")
+    }
+    
+    return(list(ams=ams,amsMax=amsMax,threshold=threshold))
 }
 
 ##------------------------------------------------------------------

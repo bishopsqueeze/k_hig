@@ -13,7 +13,7 @@ library(doMC)
 ##------------------------------------------------------------------
 ## register cores
 ##------------------------------------------------------------------
-registerDoMC(4)
+registerDoMC(8)
 
 ##------------------------------------------------------------------
 ## Clear the workspace
@@ -92,44 +92,6 @@ max_AMS <- AMS(trainClass$label.num, trainClass$label.num, trainClass$weight)
 #trainDescr[trainDescr==na_val] <- NA
 
 ##------------------------------------------------------------------
-## Create the hold out data
-##------------------------------------------------------------------
-
-## hold-out percentage
-ho.pct      <- 0.10
-
-## define a partition index using the full dataset
-set.seed(1234)
-samp.idx    <- createDataPartition(
-                            y=trainClass[,c("label")],
-                            times=1,
-                            p = (1-ho.pct),
-                            list = TRUE)
-
-## split the full dataset into HOLD-OUT (ho) and TRAIN/TEST (tt)
-hoDescr     <- trainDescr[ -samp.idx$Resample1, ]
-hoClass     <- trainClass[ -samp.idx$Resample1, ]
-ttDescr     <- trainDescr[  samp.idx$Resample1, ]
-ttClass     <- trainClass[  samp.idx$Resample1, ]
-
-
-##------------------------------------------------------------------
-## Renormalize weights
-##------------------------------------------------------------------
-ttClass$weight <- normalize(ttClass$weight,ttClass$label.num,s_total,b_total)
-hoClass$weight <- normalize(hoClass$weight,hoClass$label.num,s_total,b_total)
-
-## confirm normalization
-AMS(ttClass$label.num,ttClass$label.num,ttClass$weight)
-AMS(hoClass$label.num,hoClass$label.num,hoClass$weight)
-
-s_train <- sum(ttClass$weight[ttClass$label.num==s_val])
-b_train <- sum(ttClass$weight[ttClass$label.num==b_val])
-
-w = ifelse(ttClass$label.num==s_val, ttClass$weight/s_train, ttClass$weight/b_train)
-
-
-##------------------------------------------------------------------
 ## set-up the fit parameters using the pre-selected (stratified) samples
 ##------------------------------------------------------------------
 num.cv      <- 5
@@ -147,15 +109,14 @@ fitControl <- trainControl(
 
 ##------------------------------------------------------------------
 ## for full fits use the best model from the sweeps
-##------------------------------------------------------------------
-gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(500), .shrinkage=c(0.05))
+##------------------------------------------------------------------3
+gbmGrid <- expand.grid(.interaction.depth=c(9), .n.trees=c(500), .shrinkage=c(0.20))
 nGrid   <- dim(gbmGrid)[1]
-
 
 ##------------------------------------------------------------------
 ## define the number of "iterations"
 ##------------------------------------------------------------------
-num.iter   <- 20
+num.iter   <- 100
 seed.vec   <- sample.int(1000000,num.iter,replace=FALSE)
 
 ##------------------------------------------------------------------
@@ -163,14 +124,55 @@ seed.vec   <- sample.int(1000000,num.iter,replace=FALSE)
 ##------------------------------------------------------------------
 for (i in 1:num.iter) {
 
-    ## define an output filename
-    tmp.filename <- paste("gbm_full_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_iter",i,"_V07.Rdata",sep="")
+    ##------------------------------------------------------------------
+    ## In this instance, allow the hold-out data to be shuffled on
+    ## each iteration
+    ##------------------------------------------------------------------
 
-    ## load the fold index
-    ##tmp.idx      <- fold.idx[[i]]
-    
-    ## perform the fit using the training data
+    ## hold-out percentage
+    ho.pct      <- 0.10
+
+    ## define a partition index using the full dataset
     set.seed(seed.vec[i])
+    samp.idx    <- createDataPartition(
+                            y=trainClass[,c("label")],
+                            times=1,
+                            p = (1-ho.pct),
+                            list = TRUE)
+
+    ## split the full dataset into HOLD-OUT (ho) and TRAIN/TEST (tt)
+    hoDescr     <- trainDescr[ -samp.idx$Resample1, ]
+    hoClass     <- trainClass[ -samp.idx$Resample1, ]
+    ttDescr     <- trainDescr[  samp.idx$Resample1, ]
+    ttClass     <- trainClass[  samp.idx$Resample1, ]
+
+    ##------------------------------------------------------------------
+    ## Renormalize weights
+    ##------------------------------------------------------------------
+    ttClass$weight <- normalize(ttClass$weight,ttClass$label.num,s_total,b_total)
+    hoClass$weight <- normalize(hoClass$weight,hoClass$label.num,s_total,b_total)
+
+    ##------------------------------------------------------------------
+    ## confirm normalization
+    ##------------------------------------------------------------------
+    AMS(ttClass$label.num,ttClass$label.num,ttClass$weight)
+    AMS(hoClass$label.num,hoClass$label.num,hoClass$weight)
+
+    ##------------------------------------------------------------------
+    ## Define fit weights
+    ##------------------------------------------------------------------
+    s_train <- sum(ttClass$weight[ttClass$label.num==s_val])
+    b_train <- sum(ttClass$weight[ttClass$label.num==b_val])
+    w       <- ifelse(ttClass$label.num==s_val, ttClass$weight/s_train, ttClass$weight/b_train)
+
+    ##------------------------------------------------------------------
+    ## define an output filename
+    ##------------------------------------------------------------------
+    tmp.filename <- paste("gbm_full2_depth",gbmGrid[1,1],"_trees",gbmGrid[1,2],"_shrink",gbmGrid[1,3],"_iter",i,"_V09.Rdata",sep="")
+
+    ##------------------------------------------------------------------
+    ## perform the fit using the training data
+    ##------------------------------------------------------------------
     tmp.fit      <- try(train(  x=ttDescr[,-1],
                                 y=ttClass[,c("label")],
                                 method="gbm",
@@ -178,18 +180,26 @@ for (i in 1:num.iter) {
                                 trControl=fitControl,
                                 tuneGrid=data.frame(.interaction.depth=gbmGrid[1,1], .n.trees=gbmGrid[1,2], .shrinkage=gbmGrid[1,3]),
                                 n.minobsinnode=1,
+                                distribution="adaboost",
                                 bag.fraction=0.9
                                 ))
 
-    hold.score   <- predict(tmp.fit, newdata=hoDescr[,-1], type="prob")[,c("s")]
-    test$scores  <- hold.score
+    ##------------------------------------------------------------------
+    ## Score the model using the hold-out sample
+    ##------------------------------------------------------------------
+    hold.score      <- predict(tmp.fit, newdata=hoDescr[,-1], type="prob")[,c("s")]
+    hoClass$scores  <- hold.score
     
-    hold.res     <- getAMS(test)
-    hold.pred    <- ifelse(test$scores >= hold.res$threshold, s_val,b_val)
-    AMS(hold.pred, test$label.num, test$weight)
+    hold.res        <- getAMS(hoClass)
+    hold.pred       <- ifelse(hoClass$scores >= hold.res$threshold, s_val, b_val)
+    AMS(hold.pred, hoClass$label.num, hoClass$weight)
 
+    cat("Iteration = ", i ," AMS Ouput = ", as.numeric(hold.res[1]), "\n")
+    
+    ##------------------------------------------------------------------
     ## save the results
-    save(tmp.fit, samp.idx, hold.score, hold.res, hold.pred, seed.vec, file=tmp.filename)
+    ##------------------------------------------------------------------
+    save(tmp.fit, samp.idx, hoDescr, hoClass, hold.score, hold.res, hold.pred, seed.vec, file=tmp.filename)
 
 }
 
